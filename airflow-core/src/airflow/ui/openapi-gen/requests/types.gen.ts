@@ -527,7 +527,6 @@ export type ConnectionTestStatusResponse = {
     token: string;
     connection_id: string;
     state: string;
-    result_status?: boolean | null;
     result_message?: string | null;
     created_at: string;
 };
