@@ -3933,6 +3933,55 @@ export class AuthLinksService {
     
 }
 
+export class PartitionedDagRunService {
+    /**
+     * Get Partitioned Dag Runs
+     * Return PartitionedDagRuns. Filter by dag_id and/or has_created_dag_run_id.
+     * @param data The data for the request.
+     * @param data.dagId
+     * @param data.hasCreatedDagRunId
+     * @returns PartitionedDagRunCollectionResponse Successful Response
+     * @throws ApiError
+     */
+    public static getPartitionedDagRuns(data: GetPartitionedDagRunsData = {}): CancelablePromise<GetPartitionedDagRunsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/ui/partitioned_dag_runs',
+            query: {
+                dag_id: data.dagId,
+                has_created_dag_run_id: data.hasCreatedDagRunId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Pending Partitioned Dag Run
+     * Return full details for pending PartitionedDagRun.
+     * @param data The data for the request.
+     * @param data.dagId
+     * @param data.partitionKey
+     * @returns PartitionedDagRunDetailResponse Successful Response
+     * @throws ApiError
+     */
+    public static getPendingPartitionedDagRun(data: GetPendingPartitionedDagRunData): CancelablePromise<GetPendingPartitionedDagRunResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/ui/pending_partitioned_dag_run/{dag_id}/{partition_key}',
+            path: {
+                dag_id: data.dagId,
+                partition_key: data.partitionKey
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+}
+
 export class DependenciesService {
     /**
      * Get Dependencies
@@ -4028,7 +4077,7 @@ export class DeadlinesService {
     public static getDeadlines(data: GetDeadlinesData): CancelablePromise<GetDeadlinesResponse> {
         return __request(OpenAPI, {
             method: 'GET',
-            url: '/ui/deadlines/{dag_id}/{run_id}',
+            url: '/ui/dags/{dag_id}/dagRuns/{dag_run_id}/deadlines',
             path: {
                 dag_id: data.dagId,
                 dag_run_id: data.dagRunId
