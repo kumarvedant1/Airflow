@@ -519,7 +519,7 @@ export type ConnectionTestQueuedResponse = {
  */
 export type ConnectionTestRequestBody = {
     connection_id: string;
-    queue?: string | null;
+    executor?: string | null;
 };
 
 /**
@@ -2558,9 +2558,9 @@ export type BulkConnectionsResponse = BulkResponse;
 export type PatchConnectionAndTestData = {
     connectionId: string;
     /**
-     * Executor queue to route the connection test to
+     * Executor (team) to route the connection test to
      */
-    queue?: string | null;
+    executor?: string | null;
     requestBody: ConnectionBody;
     updateMask?: Array<(string)> | null;
 };
@@ -4570,7 +4570,7 @@ export type $OpenApiTs = {
             };
         };
     };
-    '/api/v2/connections/{connection_id}/save-and-test': {
+    '/api/v2/connections/{connection_id}/test': {
         patch: {
             req: PatchConnectionAndTestData;
             res: {
