@@ -1767,6 +1767,17 @@ export const $ConnectionTestRequestBody = {
                 }
             ],
             title: 'Executor'
+        },
+        queue: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Queue'
         }
     },
     additionalProperties: false,

@@ -275,6 +275,7 @@ class ConnectionTestRequestBody(BaseModel):
     )
     connection_id: Annotated[str, Field(title="Connection Id")]
     executor: Annotated[str | None, Field(title="Executor")] = None
+    queue: Annotated[str | None, Field(title="Queue")] = None
 
 
 class ConnectionTestResponse(BaseModel):
