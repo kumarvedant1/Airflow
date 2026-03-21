@@ -67,8 +67,7 @@ from airflow.models.asset import (
 )
 from airflow.models.backfill import Backfill, BackfillDagRun, ReprocessBehavior, _create_backfill
 from airflow.models.callback import ExecutorCallback
-from airflow.models.connection import Connection
-from airflow.models.connection_test import ConnectionTest, ConnectionTestState, snapshot_connection
+from airflow.models.connection_test import ConnectionTestRequest, ConnectionTestState
 from airflow.models.dag import DagModel, get_last_dagrun, infer_automated_data_interval
 from airflow.models.dag_version import DagVersion
 from airflow.models.dagbundle import DagBundleModel
@@ -115,7 +114,6 @@ from tests_common.test_utils.db import (
     clear_db_assets,
     clear_db_backfills,
     clear_db_callbacks,
-    clear_db_connections,
     clear_db_dag_bundles,
     clear_db_dags,
     clear_db_deadline,
@@ -9625,7 +9623,7 @@ class TestSchedulerCallbackBundleInfoDagVersionNullable:
 @pytest.fixture
 def scheduler_job_runner_for_connection_tests(session):
     """Create a SchedulerJobRunner with a mock Job and supporting executor."""
-    session.execute(delete(ConnectionTest))
+    session.execute(delete(ConnectionTestRequest))
     session.commit()
 
     mock_job = mock.MagicMock(spec=Job)
@@ -9639,7 +9637,7 @@ def scheduler_job_runner_for_connection_tests(session):
     runner.executor = executor
     runner._log = mock.MagicMock(spec=logging.Logger)
     yield runner
-    session.execute(delete(ConnectionTest))
+    session.execute(delete(ConnectionTestRequest))
     session.commit()
 
 
@@ -9653,7 +9651,7 @@ class TestDispatchConnectionTests:
     )
     def test_dispatch_pending_tests(self, scheduler_job_runner_for_connection_tests, session):
         """Pending connection tests are dispatched to a supporting executor."""
-        ct = ConnectionTest(connection_id="test_conn")
+        ct = ConnectionTestRequest(conn_type="test_type", connection_id="test_conn")
         session.add(ct)
         session.commit()
         assert ct.state == ConnectionTestState.PENDING
@@ -9661,7 +9659,7 @@ class TestDispatchConnectionTests:
         scheduler_job_runner_for_connection_tests._enqueue_connection_tests(session=session)
 
         session.expire_all()
-        ct = session.get(ConnectionTest, ct.id)
+        ct = session.get(ConnectionTestRequest, ct.id)
         assert ct.state == ConnectionTestState.QUEUED
         assert len(scheduler_job_runner_for_connection_tests.executor.queued_connection_tests) == 1
 
@@ -9674,18 +9672,18 @@ class TestDispatchConnectionTests:
     )
     def test_dispatch_respects_concurrency_limit(self, scheduler_job_runner_for_connection_tests, session):
         """Excess pending tests stay PENDING when concurrency is at capacity."""
-        ct_active = ConnectionTest(connection_id="active_conn")
+        ct_active = ConnectionTestRequest(conn_type="test_type", connection_id="active_conn")
         ct_active.state = ConnectionTestState.QUEUED
         session.add(ct_active)
 
-        ct_pending = ConnectionTest(connection_id="pending_conn")
+        ct_pending = ConnectionTestRequest(conn_type="test_type", connection_id="pending_conn")
         session.add(ct_pending)
         session.commit()
 
         scheduler_job_runner_for_connection_tests._enqueue_connection_tests(session=session)
 
         session.expire_all()
-        ct_pending = session.get(ConnectionTest, ct_pending.id)
+        ct_pending = session.get(ConnectionTestRequest, ct_pending.id)
         assert ct_pending.state == ConnectionTestState.PENDING
 
     @mock.patch.dict(
@@ -9704,16 +9702,15 @@ class TestDispatchConnectionTests:
         scheduler_job_runner_for_connection_tests.executors = [unsupporting_executor]
         scheduler_job_runner_for_connection_tests.executor = unsupporting_executor
 
-        ct = ConnectionTest(connection_id="test_conn")
+        ct = ConnectionTestRequest(conn_type="test_type", connection_id="test_conn")
         session.add(ct)
         session.commit()
 
         scheduler_job_runner_for_connection_tests._enqueue_connection_tests(session=session)
 
         session.expire_all()
-        ct = session.get(ConnectionTest, ct.id)
+        ct = session.get(ConnectionTestRequest, ct.id)
         assert ct.state == ConnectionTestState.FAILED
-        assert ct.connection_snapshot is None
         assert "No executor supports connection testing" in ct.result_message
 
     @mock.patch.dict(
@@ -9727,14 +9724,14 @@ class TestDispatchConnectionTests:
         self, scheduler_job_runner_for_connection_tests, session
     ):
         """Tests requesting an executor with no match are failed immediately."""
-        ct = ConnectionTest(connection_id="test_conn", executor="gpu_workers")
+        ct = ConnectionTestRequest(conn_type="test_type", connection_id="test_conn", executor="gpu_workers")
         session.add(ct)
         session.commit()
 
         scheduler_job_runner_for_connection_tests._enqueue_connection_tests(session=session)
 
         session.expire_all()
-        ct = session.get(ConnectionTest, ct.id)
+        ct = session.get(ConnectionTestRequest, ct.id)
         assert ct.state == ConnectionTestState.FAILED
         assert "gpu_workers" in ct.result_message
 
@@ -9749,13 +9746,13 @@ class TestDispatchConnectionTests:
         self, scheduler_job_runner_for_connection_tests, session
     ):
         """When 1 slot is occupied, only budget (cap - active) pending tests are dispatched."""
-        ct_active = ConnectionTest(connection_id="active_conn")
+        ct_active = ConnectionTestRequest(conn_type="test_type", connection_id="active_conn")
         ct_active.state = ConnectionTestState.RUNNING
         session.add(ct_active)
 
         pending_tests = []
         for i in range(3):
-            ct = ConnectionTest(connection_id=f"pending_{i}")
+            ct = ConnectionTestRequest(conn_type="test_type", connection_id=f"pending_{i}")
             session.add(ct)
             pending_tests.append(ct)
         session.commit()
@@ -9764,7 +9761,7 @@ class TestDispatchConnectionTests:
         scheduler_job_runner_for_connection_tests._enqueue_connection_tests(session=session)
 
         session.expire_all()
-        states = [session.get(ConnectionTest, pid).state for pid in pending_ids]
+        states = [session.get(ConnectionTestRequest, pid).state for pid in pending_ids]
         assert states.count(ConnectionTestState.QUEUED) == 2
         assert states.count(ConnectionTestState.PENDING) == 1
 
@@ -9780,17 +9777,17 @@ class TestDispatchConnectionTests:
         initial_time = timezone.utcnow()
 
         with time_machine.travel(initial_time - timedelta(minutes=5), tick=False):
-            ct_old = ConnectionTest(connection_id="old_conn")
+            ct_old = ConnectionTestRequest(conn_type="test_type", connection_id="old_conn")
             session.add(ct_old)
             session.flush()
 
         with time_machine.travel(initial_time, tick=False):
-            ct_new = ConnectionTest(connection_id="new_conn")
+            ct_new = ConnectionTestRequest(conn_type="test_type", connection_id="new_conn")
             session.add(ct_new)
             session.flush()
 
         with time_machine.travel(initial_time + timedelta(minutes=1), tick=False):
-            ct_newest = ConnectionTest(connection_id="newest_conn")
+            ct_newest = ConnectionTestRequest(conn_type="test_type", connection_id="newest_conn")
             session.add(ct_newest)
             session.flush()
 
@@ -9799,9 +9796,9 @@ class TestDispatchConnectionTests:
         scheduler_job_runner_for_connection_tests._enqueue_connection_tests(session=session)
 
         session.expire_all()
-        assert session.get(ConnectionTest, ct_old.id).state == ConnectionTestState.QUEUED
-        assert session.get(ConnectionTest, ct_new.id).state == ConnectionTestState.QUEUED
-        assert session.get(ConnectionTest, ct_newest.id).state == ConnectionTestState.PENDING
+        assert session.get(ConnectionTestRequest, ct_old.id).state == ConnectionTestState.QUEUED
+        assert session.get(ConnectionTestRequest, ct_new.id).state == ConnectionTestState.QUEUED
+        assert session.get(ConnectionTestRequest, ct_newest.id).state == ConnectionTestState.PENDING
 
     @mock.patch.dict(
         os.environ,
@@ -9819,14 +9816,16 @@ class TestDispatchConnectionTests:
             "_try_to_load_executor",
             return_value=None,
         ):
-            ct = ConnectionTest(connection_id="test_conn", executor="nonexistent_executor")
+            ct = ConnectionTestRequest(
+                conn_type="test_type", connection_id="test_conn", executor="nonexistent_executor"
+            )
             session.add(ct)
             session.commit()
 
             scheduler_job_runner_for_connection_tests._enqueue_connection_tests(session=session)
 
         session.expire_all()
-        ct = session.get(ConnectionTest, ct.id)
+        ct = session.get(ConnectionTestRequest, ct.id)
         assert ct.state == ConnectionTestState.FAILED
         assert "nonexistent_executor" in ct.result_message
 
@@ -9839,7 +9838,7 @@ class TestDispatchConnectionTests:
     )
     def test_dispatch_executor_matched_by_alias(self, session):
         """When executor is specified, the executor whose name.alias matches is selected."""
-        session.execute(delete(ConnectionTest))
+        session.execute(delete(ConnectionTestRequest))
         session.commit()
 
         mock_job = mock.MagicMock(spec=Job)
@@ -9860,7 +9859,7 @@ class TestDispatchConnectionTests:
         runner.executor = executor_a
         runner._log = mock.MagicMock(spec=logging.Logger)
 
-        ct = ConnectionTest(connection_id="team_conn", executor="executor_b")
+        ct = ConnectionTestRequest(conn_type="test_type", connection_id="team_conn", executor="executor_b")
         session.add(ct)
         session.commit()
 
@@ -9878,7 +9877,7 @@ class TestDispatchConnectionTests:
     )
     def test_dispatch_executor_matched_by_module_path(self, session):
         """When executor is specified by module_path, the matching executor is selected."""
-        session.execute(delete(ConnectionTest))
+        session.execute(delete(ConnectionTestRequest))
         session.commit()
 
         mock_job = mock.MagicMock(spec=Job)
@@ -9899,7 +9898,9 @@ class TestDispatchConnectionTests:
         runner.executor = executor_a
         runner._log = mock.MagicMock(spec=logging.Logger)
 
-        ct = ConnectionTest(connection_id="team_conn", executor="path.to.ExecutorB")
+        ct = ConnectionTestRequest(
+            conn_type="test_type", connection_id="team_conn", executor="path.to.ExecutorB"
+        )
         session.add(ct)
         session.commit()
 
@@ -9910,7 +9911,7 @@ class TestDispatchConnectionTests:
 
     def test_dispatch_executor_matched_by_class_name(self, session):
         """When executor is specified by class name only, the matching executor is selected."""
-        session.execute(delete(ConnectionTest))
+        session.execute(delete(ConnectionTestRequest))
         session.commit()
 
         mock_job = mock.MagicMock(spec=Job)
@@ -9931,7 +9932,7 @@ class TestDispatchConnectionTests:
         runner.executor = executor_a
         runner._log = mock.MagicMock(spec=logging.Logger)
 
-        ct = ConnectionTest(connection_id="team_conn", executor="ExecutorB")
+        ct = ConnectionTestRequest(conn_type="test_type", connection_id="team_conn", executor="ExecutorB")
         session.add(ct)
         session.commit()
 
@@ -9954,14 +9955,14 @@ class TestDispatchConnectionTests:
         # Simulate 1 running task so all parallelism slots are occupied
         executor.running = {"fake_task_key"}
 
-        ct = ConnectionTest(connection_id="test_conn")
+        ct = ConnectionTestRequest(conn_type="test_type", connection_id="test_conn")
         session.add(ct)
         session.commit()
 
         scheduler_job_runner_for_connection_tests._enqueue_connection_tests(session=session)
 
         session.expire_all()
-        ct = session.get(ConnectionTest, ct.id)
+        ct = session.get(ConnectionTestRequest, ct.id)
         assert ct.state == ConnectionTestState.PENDING
 
     @mock.patch.dict(
@@ -9978,16 +9979,15 @@ class TestDispatchConnectionTests:
         executor = scheduler_job_runner_for_connection_tests.executor
         executor.supports_connection_test = False
 
-        ct = ConnectionTest(connection_id="test_conn")
+        ct = ConnectionTestRequest(conn_type="test_type", connection_id="test_conn")
         session.add(ct)
         session.commit()
 
         scheduler_job_runner_for_connection_tests._enqueue_connection_tests(session=session)
 
         session.expire_all()
-        ct = session.get(ConnectionTest, ct.id)
+        ct = session.get(ConnectionTestRequest, ct.id)
         assert ct.state == ConnectionTestState.FAILED
-        assert ct.connection_snapshot is None
         assert "No executor supports connection testing" in ct.result_message
 
 
@@ -9998,7 +9998,7 @@ class TestReapStaleConnectionTests:
         initial_time = timezone.utcnow()
 
         with time_machine.travel(initial_time, tick=False):
-            ct = ConnectionTest(connection_id="test_conn")
+            ct = ConnectionTestRequest(conn_type="test_type", connection_id="test_conn")
             ct.state = ConnectionTestState.QUEUED
             session.add(ct)
             session.commit()
@@ -10007,14 +10007,14 @@ class TestReapStaleConnectionTests:
             scheduler_job_runner_for_connection_tests._reap_stale_connection_tests(session=session)
 
         session.expire_all()
-        ct = session.get(ConnectionTest, ct.id)
+        ct = session.get(ConnectionTestRequest, ct.id)
         assert ct.state == ConnectionTestState.FAILED
         assert "timed out" in ct.result_message
 
     @mock.patch.dict(os.environ, {"AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60"})
     def test_does_not_reap_fresh_tests(self, scheduler_job_runner_for_connection_tests, session):
         """Fresh QUEUED tests are not reaped."""
-        ct = ConnectionTest(connection_id="test_conn")
+        ct = ConnectionTestRequest(conn_type="test_type", connection_id="test_conn")
         ct.state = ConnectionTestState.QUEUED
         session.add(ct)
         session.commit()
@@ -10022,72 +10022,15 @@ class TestReapStaleConnectionTests:
         scheduler_job_runner_for_connection_tests._reap_stale_connection_tests(session=session)
 
         session.expire_all()
-        ct = session.get(ConnectionTest, ct.id)
+        ct = session.get(ConnectionTestRequest, ct.id)
         assert ct.state == ConnectionTestState.QUEUED
-
-    @mock.patch.dict(os.environ, {"AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60"})
-    def test_reaper_reverts_connection_on_timeout_with_snapshot(
-        self, scheduler_job_runner_for_connection_tests, session
-    ):
-        """Stale tests with a snapshot trigger revert on timeout."""
-        clear_db_connections(add_default_connections_back=False)
-
-        conn = Connection(
-            conn_id="reaper_conn",
-            conn_type="postgres",
-            host="old-host.example.com",
-        )
-        session.add(conn)
-        session.flush()
-
-        pre_snap = snapshot_connection(conn)
-        conn.host = "new-host.example.com"
-        post_snap = snapshot_connection(conn)
-        session.flush()
-
-        initial_time = timezone.utcnow()
-        with time_machine.travel(initial_time, tick=False):
-            ct = ConnectionTest(connection_id="reaper_conn")
-            ct.state = ConnectionTestState.QUEUED
-            ct.connection_snapshot = {"pre": pre_snap, "post": post_snap}
-            session.add(ct)
-            session.commit()
-
-        with time_machine.travel(initial_time + timedelta(seconds=200), tick=False):
-            scheduler_job_runner_for_connection_tests._reap_stale_connection_tests(session=session)
-
-        session.expire_all()
-        ct = session.get(ConnectionTest, ct.id)
-        assert ct.state == ConnectionTestState.FAILED
-        assert ct.reverted is True
-        assert ct.connection_snapshot is None
-        conn = session.scalar(select(Connection).filter_by(conn_id="reaper_conn"))
-        assert conn.host == "old-host.example.com"
-
-    @mock.patch.dict(os.environ, {"AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60"})
-    def test_reaper_no_revert_without_snapshot(self, scheduler_job_runner_for_connection_tests, session):
-        """Stale tests without a snapshot do not trigger revert."""
-        initial_time = timezone.utcnow()
-        with time_machine.travel(initial_time, tick=False):
-            ct = ConnectionTest(connection_id="no_snap_conn")
-            ct.state = ConnectionTestState.QUEUED
-            session.add(ct)
-            session.commit()
-
-        with time_machine.travel(initial_time + timedelta(seconds=200), tick=False):
-            scheduler_job_runner_for_connection_tests._reap_stale_connection_tests(session=session)
-
-        session.expire_all()
-        ct = session.get(ConnectionTest, ct.id)
-        assert ct.state == ConnectionTestState.FAILED
-        assert ct.reverted is False
 
     @mock.patch.dict(os.environ, {"AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60"})
     def test_reap_stale_running_test(self, scheduler_job_runner_for_connection_tests, session):
         """Stale RUNNING tests are also reaped by the reaper."""
         initial_time = timezone.utcnow()
         with time_machine.travel(initial_time, tick=False):
-            ct = ConnectionTest(connection_id="running_conn")
+            ct = ConnectionTestRequest(conn_type="test_type", connection_id="running_conn")
             ct.state = ConnectionTestState.RUNNING
             session.add(ct)
             session.commit()
@@ -10096,7 +10039,7 @@ class TestReapStaleConnectionTests:
             scheduler_job_runner_for_connection_tests._reap_stale_connection_tests(session=session)
 
         session.expire_all()
-        ct = session.get(ConnectionTest, ct.id)
+        ct = session.get(ConnectionTestRequest, ct.id)
         assert ct.state == ConnectionTestState.FAILED
         assert "timed out" in ct.result_message
 
@@ -10105,12 +10048,12 @@ class TestReapStaleConnectionTests:
         """Tests in terminal states (SUCCESS, FAILED) are not touched by the reaper."""
         initial_time = timezone.utcnow()
         with time_machine.travel(initial_time, tick=False):
-            ct_success = ConnectionTest(connection_id="success_conn")
+            ct_success = ConnectionTestRequest(conn_type="test_type", connection_id="success_conn")
             ct_success.state = ConnectionTestState.SUCCESS
             ct_success.result_message = "OK"
             session.add(ct_success)
 
-            ct_failed = ConnectionTest(connection_id="failed_conn")
+            ct_failed = ConnectionTestRequest(conn_type="test_type", connection_id="failed_conn")
             ct_failed.state = ConnectionTestState.FAILED
             ct_failed.result_message = "Error"
             session.add(ct_failed)
@@ -10120,5 +10063,5 @@ class TestReapStaleConnectionTests:
             scheduler_job_runner_for_connection_tests._reap_stale_connection_tests(session=session)
 
         session.expire_all()
-        assert session.get(ConnectionTest, ct_success.id).state == ConnectionTestState.SUCCESS
-        assert session.get(ConnectionTest, ct_failed.id).state == ConnectionTestState.FAILED
+        assert session.get(ConnectionTestRequest, ct_success.id).state == ConnectionTestState.SUCCESS
+        assert session.get(ConnectionTestRequest, ct_failed.id).state == ConnectionTestState.FAILED
