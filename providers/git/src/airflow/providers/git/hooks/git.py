@@ -21,6 +21,8 @@ import contextlib
 import json
 import logging
 import os
+import shlex
+import stat
 import tempfile
 from typing import Any
 
@@ -34,7 +36,18 @@ class GitHook(BaseHook):
     Hook for git repositories.
 
     :param git_conn_id: Connection ID for SSH connection to the repository
+    :param repo_url: Explicit Git repository URL to override the connection's host.
 
+    Connection extra fields:
+
+    * ``key_file`` — path to an SSH private key file.
+    * ``private_key`` — inline SSH private key string (mutually exclusive with ``key_file``).
+    * ``private_key_passphrase`` — passphrase for the private key (key_file or inline).
+    * ``strict_host_key_checking`` — ``"yes"`` or ``"no"`` (default ``"no"``).
+    * ``known_hosts_file`` — path to a custom SSH known-hosts file.
+    * ``ssh_config_file`` — path to a custom SSH config file.
+    * ``host_proxy_cmd`` — SSH ProxyCommand string (e.g. for bastion/jump hosts).
+    * ``ssh_port`` — non-default SSH port.
     """
 
     conn_name_attr = "git_conn_id"
@@ -56,6 +69,12 @@ class GitHook(BaseHook):
                     {
                         "key_file": "optional/path/to/keyfile",
                         "private_key": "optional inline private key",
+                        "private_key_passphrase": "",
+                        "strict_host_key_checking": "no",
+                        "known_hosts_file": "",
+                        "ssh_config_file": "",
+                        "host_proxy_cmd": "",
+                        "ssh_port": "",
                     }
                 )
             },
@@ -66,50 +85,167 @@ class GitHook(BaseHook):
     ) -> None:
         super().__init__()
         connection = self.get_connection(git_conn_id)
+        extra = connection.extra_dejson
+
         self.repo_url = repo_url or connection.host
         self.user_name = connection.login or "user"
         self.auth_token = connection.password
-        self.private_key = connection.extra_dejson.get("private_key")
-        self.key_file = connection.extra_dejson.get("key_file")
-        self.strict_host_key_checking = connection.extra_dejson.get("strict_host_key_checking", "no")
+
+        # SSH key authentication
+        self.private_key = extra.get("private_key")
+        self.key_file = extra.get("key_file")
+        self.private_key_passphrase = extra.get("private_key_passphrase")
+
+        # SSH connection options
+        self.strict_host_key_checking = extra.get("strict_host_key_checking", "no")
+        self.known_hosts_file = extra.get("known_hosts_file")
+        self.ssh_config_file = extra.get("ssh_config_file")
+        self.host_proxy_cmd = extra.get("host_proxy_cmd")
+        self.ssh_port: int | None = int(extra["ssh_port"]) if extra.get("ssh_port") else None
+
         self.env: dict[str, str] = {}
+        self._askpass_file: str | None = None
 
         if self.key_file and self.private_key:
             raise AirflowException("Both 'key_file' and 'private_key' cannot be provided at the same time")
         self._process_git_auth_url()
 
-    def _build_ssh_command(self, key_path: str) -> str:
-        return (
-            f"ssh -i {key_path} "
-            f"-o IdentitiesOnly=yes "
-            f"-o StrictHostKeyChecking={self.strict_host_key_checking}"
-        )
+    def _build_ssh_command(self, key_path: str | None = None) -> str:
+        parts = ["ssh"]
+
+        if key_path:
+            parts.append(f"-i {key_path}")
+            parts.append("-o IdentitiesOnly=yes")
+
+        parts.append(f"-o StrictHostKeyChecking={self.strict_host_key_checking}")
+
+        if self.known_hosts_file:
+            parts.append(f"-o UserKnownHostsFile={self.known_hosts_file}")
+        elif self.strict_host_key_checking == "no":
+            parts.append("-o UserKnownHostsFile=/dev/null")
+
+        if self.ssh_config_file:
+            parts.append(f"-F {self.ssh_config_file}")
+
+        if self.host_proxy_cmd:
+            parts.append(f'-o ProxyCommand="{self.host_proxy_cmd}"')
+
+        if self.ssh_port:
+            parts.append(f"-p {self.ssh_port}")
+
+        return " ".join(parts)
 
     def _process_git_auth_url(self):
+        """Process the repo URL without embedding credentials."""
         if not isinstance(self.repo_url, str):
             return
-        if self.auth_token and self.repo_url.startswith("https://"):
-            self.repo_url = self.repo_url.replace("https://", f"https://{self.user_name}:{self.auth_token}@")
-        elif self.auth_token and self.repo_url.startswith("http://"):
-            self.repo_url = self.repo_url.replace("http://", f"http://{self.user_name}:{self.auth_token}@")
-        elif self.repo_url.startswith("http://"):
-            # if no auth token, use the repo url as is
-            self.repo_url = self.repo_url
-        elif not self.repo_url.startswith("git@") or not self.repo_url.startswith("https://"):
+
+        if self.repo_url.startswith(("http://", "https://")):
+            # Never embed credentials in the URL.
+            # Disable interactive prompts for all HTTP(S) URLs.
+            self.env["GIT_TERMINAL_PROMPT"] = "0"
+            if self.auth_token:
+                log.info(
+                    "Using token-based authentication via GIT_ASKPASS. "
+                    "Credentials are not embedded in the repository URL."
+                )
+            return
+
+        if not self.repo_url.startswith("git@"):
             self.repo_url = os.path.expanduser(self.repo_url)
 
-    def set_git_env(self, key: str) -> None:
+    @contextlib.contextmanager
+    def _askpass_env(self):
+        """Set up GIT_ASKPASS for HTTPS token authentication with proper cleanup."""
+        if not self.auth_token:
+            yield
+            return
+
+        # Use environment variables to avoid interpolating secrets into the script.
+        # The script reads from GIT_USERNAME and GIT_PASSWORD env vars.
+        script = """#!/bin/sh
+case "$1" in
+Username*) printf '%s\\n' "$GIT_USERNAME" ;;
+Password*) printf '%s\\n' "$GIT_PASSWORD" ;;
+esac
+"""
+        askpass_path = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=False) as askpass_script:
+                askpass_script.write(script)
+                askpass_path = askpass_script.name
+            os.chmod(askpass_path, stat.S_IRWXU)
+
+            self.env["GIT_ASKPASS"] = askpass_path
+            self.env["GIT_USERNAME"] = self.user_name
+            self.env["GIT_PASSWORD"] = self.auth_token
+            self.env["GIT_TERMINAL_PROMPT"] = "0"
+            self._askpass_file = askpass_path
+            yield
+        finally:
+            if askpass_path and os.path.exists(askpass_path):
+                os.unlink(askpass_path)
+            self._askpass_file = None
+            # Clean up env entries
+            for key in ("GIT_ASKPASS", "GIT_USERNAME", "GIT_PASSWORD"):
+                self.env.pop(key, None)
+
+    def set_git_env(self, key: str | None = None) -> None:
         self.env["GIT_SSH_COMMAND"] = self._build_ssh_command(key)
 
     @contextlib.contextmanager
-    def configure_hook_env(self):
-        if self.private_key:
-            with tempfile.NamedTemporaryFile(mode="w", delete=True) as tmp_keyfile:
-                tmp_keyfile.write(self.private_key)
-                tmp_keyfile.flush()
-                os.chmod(tmp_keyfile.name, 0o600)
-                self.set_git_env(tmp_keyfile.name)
-                yield
-        else:
-            self.set_git_env(self.key_file)
+    def _passphrase_askpass_env(self):
+        """Set up SSH_ASKPASS so ssh can unlock passphrase-protected keys non-interactively."""
+        if not self.private_key_passphrase:
             yield
+            return
+
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".sh", delete=True) as askpass_script:
+            askpass_script.write(f"#!/bin/sh\necho {shlex.quote(self.private_key_passphrase)}\n")
+            askpass_script.flush()
+            os.chmod(askpass_script.name, stat.S_IRWXU)
+
+            old_askpass = os.environ.get("SSH_ASKPASS")
+            old_display = os.environ.get("DISPLAY")
+            old_askpass_require = os.environ.get("SSH_ASKPASS_REQUIRE")
+            try:
+                os.environ["SSH_ASKPASS"] = askpass_script.name
+                os.environ["SSH_ASKPASS_REQUIRE"] = "force"
+                # DISPLAY must be set for SSH_ASKPASS to be used
+                os.environ.setdefault("DISPLAY", ":")
+                self.env["SSH_ASKPASS"] = askpass_script.name
+                self.env["SSH_ASKPASS_REQUIRE"] = "force"
+                self.env.setdefault("DISPLAY", os.environ["DISPLAY"])
+                yield
+            finally:
+                for var, old_val in [
+                    ("SSH_ASKPASS", old_askpass),
+                    ("DISPLAY", old_display),
+                    ("SSH_ASKPASS_REQUIRE", old_askpass_require),
+                ]:
+                    if old_val is None:
+                        os.environ.pop(var, None)
+                    else:
+                        os.environ[var] = old_val
+
+    @contextlib.contextmanager
+    def configure_hook_env(self):
+        with self._askpass_env():
+            if self.private_key:
+                with tempfile.NamedTemporaryFile(mode="w", delete=True) as tmp_keyfile:
+                    tmp_keyfile.write(self.private_key)
+                    tmp_keyfile.flush()
+                    os.chmod(tmp_keyfile.name, 0o600)
+                    self.set_git_env(tmp_keyfile.name)
+                    with self._passphrase_askpass_env():
+                        yield
+            elif self.key_file:
+                self.set_git_env(self.key_file)
+                with self._passphrase_askpass_env():
+                    yield
+            elif self.host_proxy_cmd or self.ssh_port or self.ssh_config_file or self.known_hosts_file:
+                self.set_git_env()
+                yield
+            else:
+                self.set_git_env(self.key_file)
+                yield

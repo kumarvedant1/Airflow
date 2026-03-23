@@ -125,17 +125,18 @@ class TestGitHook:
         ("conn_id", "hook_kwargs", "expected_repo_url"),
         [
             (CONN_DEFAULT, {}, AIRFLOW_GIT),
-            (CONN_HTTPS, {}, f"https://user:{ACCESS_TOKEN}@github.com/apache/airflow.git"),
+            # Credentials are NOT embedded in repo_url; URL stays clean
+            (CONN_HTTPS, {}, AIRFLOW_HTTPS_URL),
             (
                 CONN_HTTPS,
                 {"repo_url": "https://github.com/apache/zzzairflow"},
-                f"https://user:{ACCESS_TOKEN}@github.com/apache/zzzairflow",
+                "https://github.com/apache/zzzairflow",
             ),
-            (CONN_HTTP, {}, f"http://user:{ACCESS_TOKEN}@github.com/apache/airflow.git"),
+            (CONN_HTTP, {}, AIRFLOW_HTTP_URL),
             (
                 CONN_HTTP,
                 {"repo_url": "http://github.com/apache/zzzairflow"},
-                f"http://user:{ACCESS_TOKEN}@github.com/apache/zzzairflow",
+                "http://github.com/apache/zzzairflow",
             ),
             (CONN_HTTP_NO_AUTH, {}, AIRFLOW_HTTP_URL),
             (
@@ -147,15 +148,60 @@ class TestGitHook:
         ],
     )
     def test_correct_repo_urls(self, conn_id, hook_kwargs, expected_repo_url):
+        """Repo URLs should never contain embedded credentials."""
         hook = GitHook(git_conn_id=conn_id, **hook_kwargs)
         assert hook.repo_url == expected_repo_url
+        # Verify no credentials leak into the URL
+        if hook.auth_token:
+            assert hook.auth_token not in hook.repo_url
+
+    def test_https_with_token_sets_terminal_prompt_disabled(self):
+        """GIT_TERMINAL_PROMPT should be disabled for all HTTP(S) URLs."""
+        hook = GitHook(git_conn_id=CONN_HTTPS)
+        assert hook.env.get("GIT_TERMINAL_PROMPT") == "0"
+
+    def test_http_no_auth_sets_terminal_prompt_disabled(self):
+        """GIT_TERMINAL_PROMPT should be disabled even without auth token."""
+        hook = GitHook(git_conn_id=CONN_HTTP_NO_AUTH)
+        assert hook.env.get("GIT_TERMINAL_PROMPT") == "0"
+
+    def test_askpass_env_set_and_cleaned_up(self):
+        """GIT_ASKPASS should be set during configure_hook_env and cleaned up after."""
+        hook = GitHook(git_conn_id=CONN_HTTPS)
+        askpass_path = None
+        with hook.configure_hook_env():
+            assert "GIT_ASKPASS" in hook.env
+            assert hook.env["GIT_TERMINAL_PROMPT"] == "0"
+            askpass_path = hook.env["GIT_ASKPASS"]
+            assert os.path.exists(askpass_path)
+            # Verify askpass script does NOT contain secrets directly
+            with open(askpass_path) as f:
+                script_content = f.read()
+            assert ACCESS_TOKEN not in script_content
+            assert "GIT_PASSWORD" in script_content
+            # Verify credential env vars are set
+            assert hook.env.get("GIT_USERNAME") == "user"
+            assert hook.env.get("GIT_PASSWORD") == ACCESS_TOKEN
+        # After context, the askpass file should be removed
+        assert not os.path.exists(askpass_path)
+        # And credential env vars should be cleaned up
+        assert "GIT_ASKPASS" not in hook.env
+        assert "GIT_USERNAME" not in hook.env
+        assert "GIT_PASSWORD" not in hook.env
+
+    def test_no_askpass_without_token(self):
+        """Without auth_token, no askpass script should be created."""
+        hook = GitHook(git_conn_id=CONN_HTTP_NO_AUTH)
+        with hook.configure_hook_env():
+            assert "GIT_ASKPASS" not in hook.env
 
     def test_env_var_with_configure_hook_env(self, create_connection_without_db):
         default_hook = GitHook(git_conn_id=CONN_DEFAULT)
         with default_hook.configure_hook_env():
-            assert default_hook.env == {
-                "GIT_SSH_COMMAND": "ssh -i /files/pkey.pem -o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
-            }
+            assert default_hook.env["GIT_SSH_COMMAND"] == (
+                "ssh -i /files/pkey.pem -o IdentitiesOnly=yes "
+                "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+            )
         create_connection_without_db(
             Connection(
                 conn_id="my_git_conn_strict",
@@ -167,9 +213,9 @@ class TestGitHook:
 
         strict_default_hook = GitHook(git_conn_id="my_git_conn_strict")
         with strict_default_hook.configure_hook_env():
-            assert strict_default_hook.env == {
-                "GIT_SSH_COMMAND": "ssh -i /files/pkey.pem -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
-            }
+            assert strict_default_hook.env["GIT_SSH_COMMAND"] == (
+                "ssh -i /files/pkey.pem -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes"
+            )
 
     def test_given_both_private_key_and_key_file(self, create_connection_without_db):
         create_connection_without_db(
@@ -194,9 +240,10 @@ class TestGitHook:
 
         assert hasattr(hook, "env")
         with hook.configure_hook_env():
-            assert hook.env == {
-                "GIT_SSH_COMMAND": "ssh -i /files/pkey.pem -o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
-            }
+            assert hook.env["GIT_SSH_COMMAND"] == (
+                "ssh -i /files/pkey.pem -o IdentitiesOnly=yes "
+                "-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
+            )
 
     def test_private_key_lazy_env_var(self):
         hook = GitHook(git_conn_id=CONN_ONLY_INLINE_KEY)
@@ -204,7 +251,7 @@ class TestGitHook:
 
         hook.set_git_env("dummy_inline_key")
         assert hook.env == {
-            "GIT_SSH_COMMAND": "ssh -i dummy_inline_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no"
+            "GIT_SSH_COMMAND": "ssh -i dummy_inline_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null"
         }
 
     def test_configure_hook_env(self):
@@ -219,3 +266,136 @@ class TestGitHook:
             assert os.path.exists(temp_key_path)
 
         assert not os.path.exists(temp_key_path)
+
+    def test_ssh_port(self, create_connection_without_db):
+        create_connection_without_db(
+            Connection(
+                conn_id="git_with_port",
+                host=AIRFLOW_GIT,
+                conn_type="git",
+                extra={"key_file": "/files/pkey.pem", "ssh_port": "2222"},
+            )
+        )
+        hook = GitHook(git_conn_id="git_with_port")
+        with hook.configure_hook_env():
+            cmd = hook.env["GIT_SSH_COMMAND"]
+            assert "-p 2222" in cmd
+
+    def test_proxy_command(self, create_connection_without_db):
+        create_connection_without_db(
+            Connection(
+                conn_id="git_with_proxy",
+                host=AIRFLOW_GIT,
+                conn_type="git",
+                extra={
+                    "key_file": "/files/pkey.pem",
+                    "host_proxy_cmd": "ssh -W %h:%p bastion.example.com",
+                },
+            )
+        )
+        hook = GitHook(git_conn_id="git_with_proxy")
+        with hook.configure_hook_env():
+            cmd = hook.env["GIT_SSH_COMMAND"]
+            assert 'ProxyCommand="ssh -W %h:%p bastion.example.com"' in cmd
+
+    def test_known_hosts_file(self, create_connection_without_db):
+        create_connection_without_db(
+            Connection(
+                conn_id="git_known_hosts",
+                host=AIRFLOW_GIT,
+                conn_type="git",
+                extra={
+                    "key_file": "/files/pkey.pem",
+                    "strict_host_key_checking": "yes",
+                    "known_hosts_file": "/etc/ssh/known_hosts",
+                },
+            )
+        )
+        hook = GitHook(git_conn_id="git_known_hosts")
+        with hook.configure_hook_env():
+            cmd = hook.env["GIT_SSH_COMMAND"]
+            assert "-o StrictHostKeyChecking=yes" in cmd
+            assert "-o UserKnownHostsFile=/etc/ssh/known_hosts" in cmd
+            assert "/dev/null" not in cmd
+
+    def test_ssh_config_file(self, create_connection_without_db):
+        create_connection_without_db(
+            Connection(
+                conn_id="git_ssh_config",
+                host=AIRFLOW_GIT,
+                conn_type="git",
+                extra={
+                    "key_file": "/files/pkey.pem",
+                    "ssh_config_file": "/home/user/.ssh/config",
+                },
+            )
+        )
+        hook = GitHook(git_conn_id="git_ssh_config")
+        with hook.configure_hook_env():
+            cmd = hook.env["GIT_SSH_COMMAND"]
+            assert "-F /home/user/.ssh/config" in cmd
+
+    def test_no_key_with_ssh_options_sets_env(self, create_connection_without_db):
+        """SSH options without a key still produce GIT_SSH_COMMAND."""
+        create_connection_without_db(
+            Connection(
+                conn_id="git_proxy_only",
+                host=AIRFLOW_GIT,
+                conn_type="git",
+                extra={"host_proxy_cmd": "ssh -W %h:%p bastion"},
+            )
+        )
+        hook = GitHook(git_conn_id="git_proxy_only")
+        assert hook.env == {}
+        with hook.configure_hook_env():
+            cmd = hook.env["GIT_SSH_COMMAND"]
+            assert cmd.startswith("ssh ")
+            assert "-i " not in cmd
+            assert "ProxyCommand" in cmd
+
+    def test_default_user_known_hosts_devnull_when_no_strict_checking(self):
+        """When strict_host_key_checking=no and no known_hosts_file, /dev/null is used."""
+        hook = GitHook(git_conn_id=CONN_DEFAULT)
+        with hook.configure_hook_env():
+            cmd = hook.env["GIT_SSH_COMMAND"]
+            assert "-o UserKnownHostsFile=/dev/null" in cmd
+
+    def test_passphrase_sets_askpass_env(self, create_connection_without_db):
+        create_connection_without_db(
+            Connection(
+                conn_id="git_passphrase",
+                host=AIRFLOW_GIT,
+                conn_type="git",
+                extra={
+                    "key_file": "/files/pkey.pem",
+                    "private_key_passphrase": "my_secret",
+                },
+            )
+        )
+        hook = GitHook(git_conn_id="git_passphrase")
+        with hook.configure_hook_env():
+            assert "SSH_ASKPASS" in hook.env
+            assert hook.env["SSH_ASKPASS_REQUIRE"] == "force"
+            askpass_path = hook.env["SSH_ASKPASS"]
+            assert os.path.exists(askpass_path)
+
+    def test_passphrase_askpass_cleaned_up(self, create_connection_without_db):
+        create_connection_without_db(
+            Connection(
+                conn_id="git_passphrase_cleanup",
+                host=AIRFLOW_GIT,
+                conn_type="git",
+                extra={
+                    "private_key": "inline_key",
+                    "private_key_passphrase": "my_secret",
+                },
+            )
+        )
+        hook = GitHook(git_conn_id="git_passphrase_cleanup")
+        askpass_path = None
+        with hook.configure_hook_env():
+            askpass_path = hook.env.get("SSH_ASKPASS")
+            assert askpass_path is not None
+            assert os.path.exists(askpass_path)
+        # Both the askpass script and the temp key file should be cleaned up
+        assert not os.path.exists(askpass_path)
