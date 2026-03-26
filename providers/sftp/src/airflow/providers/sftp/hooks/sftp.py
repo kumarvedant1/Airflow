@@ -23,15 +23,17 @@ import concurrent.futures
 import datetime
 import functools
 import os
+import posixpath
 import stat
 import warnings
 from collections.abc import Callable, Generator, Sequence
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from fnmatch import fnmatch
 from io import BytesIO
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import IO, TYPE_CHECKING, Any, cast
 
+import aiofiles
 import asyncssh
 from paramiko.config import SSH_PORT
 
@@ -45,6 +47,8 @@ if TYPE_CHECKING:
     from paramiko import SSHClient
     from paramiko.sftp_attr import SFTPAttributes
     from paramiko.sftp_client import SFTPClient
+
+CHUNK_SIZE = 64 * 1024  # 64KB
 
 
 def handle_connection_management(func: Callable) -> Callable:
@@ -789,24 +793,119 @@ class SFTPHookAsync(BaseHook):
         ssh_client_conn = await asyncssh.connect(**conn_config)
         return ssh_client_conn
 
-    async def list_directory(self, path: str = "") -> list[str] | None:  # type: ignore[return]
-        """Return a list of files on the SFTP server at the provided path."""
+    async def retrieve_file(
+        self,
+        remote_full_path: str,
+        local_full_path: str | BytesIO,
+        encoding: str = "utf-8",
+        chunk_size: int = CHUNK_SIZE,
+    ) -> None:
+        """
+        Transfer the remote file to a local location asynchronously.
+
+        If local_full_path is a string path, the file will be put at that location.
+        If it is a BytesIO or file-like object, the file will be streamed into it.
+
+        :param remote_full_path: Full path to the remote file.
+        :param local_full_path: Full path to the local file or a file-like buffer.
+        :param encoding: Encoding to use for reading the remote file (default: "utf-8").
+        :param chunk_size: Size of chunks to read at a time (default: 64KB).
+        """
         async with await self._get_conn() as ssh_conn:
-            sftp_client = await ssh_conn.start_sftp_client()
-            try:
-                files = await sftp_client.listdir(path)
-                return sorted(files)
-            except asyncssh.SFTPNoSuchFile:
-                return None
+            async with ssh_conn.start_sftp_client() as sftp:
+                async with sftp.open(remote_full_path, encoding=encoding) as remote_file:
+                    if isinstance(local_full_path, BytesIO):
+                        while True:
+                            chunk = await remote_file.read(chunk_size)
+                            if not chunk:
+                                break
+                            local_full_path.write(chunk.encode(encoding))
+                        local_full_path.seek(0)
+                    else:
+                        async with aiofiles.open(local_full_path, "wb") as f:
+                            while True:
+                                chunk = await remote_file.read(chunk_size)
+                                if not chunk:
+                                    break
+                                await f.write(chunk)
+
+    async def store_file(
+        self, remote_full_path: str, local_full_path: str | bytes | BytesIO
+    ) -> None:
+        """
+        Transfer a local file to the remote location.
+
+        If local_full_path_or_buffer is a string path, the file will be read
+        from that location.
+
+        :param remote_full_path: full path to the remote file
+        :param local_full_path: full path to the local file or a file-like buffer
+        """
+        async with await self._get_conn() as ssh_conn:
+            async with ssh_conn.start_sftp_client() as sftp:
+                if isinstance(local_full_path, bytes):
+                    local_full_path = BytesIO(local_full_path)
+
+                if isinstance(local_full_path, BytesIO):
+                    with suppress(asyncssh.SFTPFailure):
+                        remote_path = PurePosixPath(remote_full_path)
+                        await sftp.makedirs(str(remote_path.parent))
+
+                    async with sftp.open(remote_full_path, "wb") as f:
+                        local_full_path.seek(0)
+                        data = local_full_path.read()
+                        await f.write(data)
+                else:
+                    await sftp.put(str(local_full_path), remote_full_path)
+
+    async def mkdir(self, path: str) -> None:
+        """
+        Create a directory on the remote system asynchronously.
+
+        The default permissions are determined by the server. Parent directories are created as needed.
+
+        :param path: Full path to the remote directory to create.
+        """
+        async with await self._get_conn() as ssh_conn:
+            async with ssh_conn.start_sftp_client() as sftp:
+                await sftp.makedirs(path)
+
+    async def list_directory(self, path: str) -> list[str] | None:
+        """
+        List files in a directory on the remote system asynchronously.
+
+        Recursively lists all files under the given directory path.
+
+        :param path: Full path to the remote directory to list.
+        :return: List of file paths found under the directory, or None if the directory does not exist.
+        """
+        async with await self._get_conn() as ssh_conn:
+            async with ssh_conn.start_sftp_client() as sftp:
+
+                async def walk(dir_path: str):
+                    results = []
+                    files = await sftp.readdir(dir_path)
+
+                    for file in files:
+                        if not file.filename in {".", ".."}:
+                            file_path = posixpath.join(dir_path, file.filename)
+                            if stat.S_ISDIR(file.attrs.permissions):
+                                results.extend(await walk(file_path))
+                            else:
+                                results.append(file_path)
+
+                    return results
+
+                return await walk(path)
 
     async def read_directory(self, path: str = "") -> Sequence[asyncssh.sftp.SFTPName] | None:  # type: ignore[return]
         """Return a list of files along with their attributes on the SFTP server at the provided path."""
         async with await self._get_conn() as ssh_conn:
-            sftp_client = await ssh_conn.start_sftp_client()
-            try:
-                return await sftp_client.readdir(path)
-            except asyncssh.SFTPNoSuchFile:
-                return None
+            async with ssh_conn.start_sftp_client() as sftp:
+                try:
+                    return await sftp.readdir(path)
+                except asyncssh.SFTPNoSuchFile:
+                    return None
 
     async def get_files_and_attrs_by_pattern(
         self, path: str = "", fnmatch_pattern: str = ""
@@ -832,12 +931,12 @@ class SFTPHookAsync(BaseHook):
         :param path: full path to the remote file
         """
         async with await self._get_conn() as ssh_conn:
-            try:
-                sftp_client = await ssh_conn.start_sftp_client()
-                ftp_mdtm = await sftp_client.stat(path)
-                modified_time = ftp_mdtm.mtime
-                mod_time = datetime.datetime.fromtimestamp(modified_time).strftime("%Y%m%d%H%M%S")  # type: ignore[arg-type]
-                self.log.info("Found File %s last modified: %s", str(path), str(mod_time))
-                return mod_time
-            except asyncssh.SFTPNoSuchFile:
-                raise AirflowException("No files matching")
+            async with ssh_conn.start_sftp_client() as sftp:
+                try:
+                    ftp_mdtm = await sftp.stat(path)
+                    modified_time = ftp_mdtm.mtime
+                    mod_time = datetime.datetime.fromtimestamp(modified_time).strftime("%Y%m%d%H%M%S")  # type: ignore[arg-type]
+                    self.log.info("Found File %s last modified: %s", str(path), str(mod_time))
+                    return mod_time
+                except asyncssh.SFTPNoSuchFile:
+                    raise AirflowException("No files matching")
