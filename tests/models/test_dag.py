@@ -3030,6 +3030,7 @@ class TestDagModel:
             max_active_runs=1,
             schedule=[dataset],
             start_date=pendulum.now().add(days=-2),
+            serialized=True,
         ) as dag:
             EmptyOperator(task_id="dummy")
 
@@ -3181,6 +3182,7 @@ class TestDagModel:
             max_active_runs=1,
             schedule=[DatasetAlias(name="hello_alias")],
             start_date=pendulum.now().add(days=-2),
+            serialized=True,
         ):
             EmptyOperator(task_id="dummy")
 
