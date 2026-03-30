@@ -31,14 +31,12 @@ class SFTPClientPool(LoggingMixin):
     """Lazy Thread-safe and Async-safe Singleton SFTP pool that keeps SSH and SFTP clients alive until exit, and limits concurrent usage to pool_size."""
 
     _instances: dict[str, SFTPClientPool] = {}
-    _lock = Lock()  # Protects the _instances dict across threads
+    _lock = Lock()
 
     def __new__(cls, sftp_conn_id: str, pool_size: int = None):
-        # Thread-safe check for existing instance
         with cls._lock:
             if sftp_conn_id not in cls._instances:
                 instance = super().__new__(cls)
-                # Initialize basic attributes immediately
                 instance._pre_init(sftp_conn_id, pool_size)
                 cls._instances[sftp_conn_id] = instance
             return cls._instances[sftp_conn_id]
@@ -55,18 +53,27 @@ class SFTPClientPool(LoggingMixin):
         self._idle: asyncio.LifoQueue[
             tuple[asyncssh.SSHClientConnection, asyncssh.SFTPClient]
         ] = asyncio.LifoQueue()
+        self._in_use: set[
+            tuple[asyncssh.SSHClientConnection, asyncssh.SFTPClient]
+        ] = set()
         self._semaphore = asyncio.Semaphore(self.pool_size)
         self._init_lock = asyncio.Lock()
         self._initialized = False
+        self._closed = False
         self.log.info("SFTPClientPool initialised...")
 
     async def _ensure_initialized(self):
-        """Ensures async-only resources are set up exactly once."""
-        if self._initialized:
+        """Ensure pool is usable (also handles re-opening after close)."""
+        if self._initialized and not self._closed:
             return
+
         async with self._init_lock:
-            if not self._initialized:
-                # Place any specific async setup here if needed
+            if not self._initialized or self._closed:
+                self.log.info("Initializing / resetting SFTPClientPool for '%s'", self.sftp_conn_id)
+                self._idle = asyncio.LifoQueue()
+                self._in_use.clear()
+                self._semaphore = asyncio.Semaphore(self.pool_size)
+                self._closed = False
                 self._initialized = True
 
     async def _create_connection(
@@ -79,26 +86,42 @@ class SFTPClientPool(LoggingMixin):
 
     async def acquire(self):
         await self._ensure_initialized()
+
+        if self._closed:
+            raise RuntimeError("Cannot acquire from a closed SFTPClientPool")
+
         self.log.debug("Acquiring SFTP connection for '%s'", self.sftp_conn_id)
 
-        # This blocks until a slot in the pool is available
         await self._semaphore.acquire()
 
         try:
-            # Try to get an existing connection
-            return self._idle.get_nowait()
-        except asyncio.QueueEmpty:
             try:
-                # If queue is empty but semaphore allowed us in, create new
-                return await self._create_connection()
-            except Exception:
-                # If creation fails, release semaphore so others can try
-                self._semaphore.release()
-                raise
+                pair = self._idle.get_nowait()
+            except asyncio.QueueEmpty:
+                pair = await self._create_connection()
+
+            self._in_use.add(pair)
+            return pair
+        except Exception:
+            self._semaphore.release()
+            raise
 
     async def release(self, pair):
-        """Returns a connection to the pool."""
-        await self._idle.put(pair)
+        if pair not in self._in_use:
+            self.log.warning("Attempted to release unknown or already released connection")
+            return
+
+        self._in_use.discard(pair)
+
+        if self._closed:
+            ssh, sftp = pair
+            with suppress(Exception):
+                sftp.exit()
+            with suppress(Exception):
+                ssh.close()
+        else:
+            await self._idle.put(pair)
+
         self.log.debug("Releasing SFTP connection for '%s'", self.sftp_conn_id)
         self._semaphore.release()
 
@@ -110,37 +133,55 @@ class SFTPClientPool(LoggingMixin):
             pair = await self.acquire()
             ssh, sftp = pair
             yield sftp
-            # Successful use, return to pool
-            await self.release(pair)
-        except Exception as e:
+        except BaseException as e:
             self.log.warning("Dropping faulty connection for '%s': %s", self.sftp_conn_id, e)
             if pair:
                 ssh, sftp = pair
+                self._in_use.discard(pair)
                 with suppress(Exception):
                     sftp.exit()
                 with suppress(Exception):
                     ssh.close()
-            # We DON'T release the pair back to _idle,
-            # but we DO release the semaphore to allow a new connection.
-            self._semaphore.release()
+                self._semaphore.release()
             raise
+        else:
+            await self.release(pair)
 
     async def close(self):
         """Gracefully shutdown all connections in the pool."""
         async with self._init_lock:
+            if self._closed:
+                return
+
+            self._closed = True
+
             self.log.info("Closing all SFTP connections for '%s'", self.sftp_conn_id)
+
             while not self._idle.empty():
                 ssh, sftp = await self._idle.get()
                 with suppress(Exception):
                     sftp.exit()
                 with suppress(Exception):
                     ssh.close()
-            self._initialized = False
+
+            for pair in list(self._in_use):
+                ssh, sftp = pair
+                with suppress(Exception):
+                    sftp.exit()
+                with suppress(Exception):
+                    ssh.close()
+                self._in_use.discard(pair)
+
+            if self._in_use:
+                self.log.warning(
+                    "Pool closed with %d active connections", len(self._in_use)
+                )
+
+            self._semaphore = asyncio.Semaphore(self.pool_size)
 
     async def __aenter__(self):
+        await self._ensure_initialized()
         return self
 
     async def __aexit__(self, exc_type, exc, tb):
-        # Note: In many singleton use-cases, you might NOT want to close
-        # the pool on __aexit__ if other tasks are still using it.
-        pass
+        await self.close()
