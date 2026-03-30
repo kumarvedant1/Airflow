@@ -829,9 +829,7 @@ class SFTPHookAsync(BaseHook):
                                     break
                                 await f.write(chunk)
 
-    async def store_file(
-        self, remote_full_path: str, local_full_path: str | bytes | BytesIO
-    ) -> None:
+    async def store_file(self, remote_full_path: str, local_full_path: str | bytes | BytesIO) -> None:
         """
         Transfer a local file to the remote location.
 
@@ -887,7 +885,7 @@ class SFTPHookAsync(BaseHook):
                     files = await sftp.readdir(dir_path)
 
                     for file in files:
-                        if not file.filename in {".", ".."}:
+                        if file.filename not in {".", ".."}:
                             file_path = posixpath.join(dir_path, file.filename)
                             if stat.S_ISDIR(file.attrs.permissions):
                                 results.extend(await walk(file_path))
