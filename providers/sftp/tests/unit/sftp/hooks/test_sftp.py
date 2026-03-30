@@ -23,7 +23,7 @@ import os
 import shutil
 import stat
 from io import BytesIO, StringIO
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch, Mock
+from unittest.mock import AsyncMock, MagicMock, Mock, PropertyMock, patch
 
 import paramiko
 import pytest
@@ -1027,7 +1027,9 @@ class TestSFTPHookAsync:
         """
         hook, sftp_client_mock = sftp_hook_mocked
 
-        sftp_client_mock.__aenter__.return_value.stat.side_effect = SFTPNoSuchFile(reason="File does not exist")
+        sftp_client_mock.__aenter__.return_value.stat.side_effect = SFTPNoSuchFile(
+            reason="File does not exist"
+        )
 
         with pytest.raises(AirflowException) as exc:
             await hook.get_mod_time("/path/does_not/exist/")
@@ -1093,21 +1095,28 @@ class TestSFTPHookAsync:
         hook, sftp_client_mock = sftp_hook_mocked
 
         sftp_client = sftp_client_mock.__aenter__.return_value
+
         async def readdir_side_effect(path):
             if path == "/dir":
+
                 class File:
                     filename = "file1"
                     attrs = type("attrs", (), {"permissions": stat.S_IFREG})
+
                 class Subdir:
                     filename = "subdir"
                     attrs = type("attrs", (), {"permissions": stat.S_IFDIR})
+
                 return [File(), Subdir()]
-            elif path == "/dir/subdir":
+            if path == "/dir/subdir":
+
                 class File:
                     filename = "file2"
                     attrs = type("attrs", (), {"permissions": stat.S_IFREG})
+
                 return [File()]
             return []
+
         sftp_client.readdir.side_effect = readdir_side_effect
 
         files = await hook.list_directory("/dir")
