@@ -9858,6 +9858,7 @@ class TestDispatchConnectionTests:
         runner.job = mock_job
         runner.executors = [executor_a, executor_b]
         runner.executor = executor_a
+        runner._multi_team = False
         runner._log = mock.MagicMock(spec=logging.Logger)
 
         ct = ConnectionTestRequest(conn_type="test_type", connection_id="team_conn", executor="executor_b")
@@ -9897,6 +9898,7 @@ class TestDispatchConnectionTests:
         runner.job = mock_job
         runner.executors = [executor_a, executor_b]
         runner.executor = executor_a
+        runner._multi_team = False
         runner._log = mock.MagicMock(spec=logging.Logger)
 
         ct = ConnectionTestRequest(
@@ -9931,6 +9933,7 @@ class TestDispatchConnectionTests:
         runner.job = mock_job
         runner.executors = [executor_a, executor_b]
         runner.executor = executor_a
+        runner._multi_team = False
         runner._log = mock.MagicMock(spec=logging.Logger)
 
         ct = ConnectionTestRequest(conn_type="test_type", connection_id="team_conn", executor="ExecutorB")
