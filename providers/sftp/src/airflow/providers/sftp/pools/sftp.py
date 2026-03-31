@@ -1,3 +1,7 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
 # to you under the Apache License, Version 2.0 (the
 # "License"); you may not use this file except in compliance
 # with the License.  You may obtain a copy of the License at
@@ -15,16 +19,12 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager, suppress
 from threading import Lock
-from typing import TYPE_CHECKING
 
 import asyncssh
 
 from airflow.configuration import conf
 from airflow.providers.sftp.hooks.sftp import SFTPHookAsync
 from airflow.sdk.definitions._internal.logging_mixin import LoggingMixin
-
-if TYPE_CHECKING:
-    from paramiko.sftp_client import SFTPClient
 
 
 class SFTPClientPool(LoggingMixin):
@@ -50,12 +50,10 @@ class SFTPClientPool(LoggingMixin):
         LoggingMixin.__init__(self)
         self.sftp_conn_id = sftp_conn_id
         self.pool_size = pool_size or conf.getint("core", "parallelism")
-        self._idle: asyncio.LifoQueue[
-            tuple[asyncssh.SSHClientConnection, asyncssh.SFTPClient]
-        ] = asyncio.LifoQueue()
-        self._in_use: set[
-            tuple[asyncssh.SSHClientConnection, asyncssh.SFTPClient]
-        ] = set()
+        self._idle: asyncio.LifoQueue[tuple[asyncssh.SSHClientConnection, asyncssh.SFTPClient]] = (
+            asyncio.LifoQueue()
+        )
+        self._in_use: set[tuple[asyncssh.SSHClientConnection, asyncssh.SFTPClient]] = set()
         self._semaphore = asyncio.Semaphore(self.pool_size)
         self._init_lock = asyncio.Lock()
         self._initialized = False
@@ -173,9 +171,7 @@ class SFTPClientPool(LoggingMixin):
                 self._in_use.discard(pair)
 
             if self._in_use:
-                self.log.warning(
-                    "Pool closed with %d active connections", len(self._in_use)
-                )
+                self.log.warning("Pool closed with %d active connections", len(self._in_use))
 
             self._semaphore = asyncio.Semaphore(self.pool_size)
 
