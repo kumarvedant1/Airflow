@@ -4070,9 +4070,9 @@ class DagModel(Base):
         you should ensure that any scheduling decisions are made in a single transaction -- as soon as the
         transaction is committed it will be unlocked.
 
-        For dataset-triggered scheduling, DAGs that have ``DatasetDagRunQueue`` rows but no matching
+        For dataset-triggered scheduling, Dags that have ``DatasetDagRunQueue`` rows but no matching
         ``SerializedDagModel`` row are omitted from the returned ``dataset_triggered_dag_info`` until
-        serialization exists; queue rows are **not** deleted here so the scheduler can re-evaluate on a
+        serialization exists; DDRQs are **not** deleted here so the scheduler can re-evaluate on a
         later run.
         """
         from airflow.models.serialized_dag import SerializedDagModel
@@ -4103,8 +4103,8 @@ class DagModel(Base):
         missing_from_serialized = set(by_dag.keys()) - ser_dag_ids
         if missing_from_serialized:
             log.debug(
-                "DAGs in DDRQ but missing SerializedDagModel "
-                "(skipping — condition cannot be evaluated): %s",
+                "Dags have queued dataset events (DDRQs), but are not found in the serialized_dag table."
+                " — skipping Dag run creation: %s",
                 sorted(missing_from_serialized),
             )
             for dag_id in missing_from_serialized:

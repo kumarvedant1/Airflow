@@ -3066,7 +3066,7 @@ class TestDagModel:
         assert dag_models == [dag_model]
 
     def test_dags_needing_dagruns_skips_ddrq_when_serialized_dag_missing(self, session, caplog):
-        """DDRQ rows for a dag_id without SerializedDagModel must be skipped (no dataset_triggered info).
+        """DDRQ rows for a Dag without SerializedDagModel must be skipped (no dataset_triggered info).
 
         Rows must remain in ``dataset_dag_run_queue`` so the scheduler can re-evaluate on a later
         heartbeat once ``SerializedDagModel`` exists (``dags_needing_dagruns`` only drops them from
