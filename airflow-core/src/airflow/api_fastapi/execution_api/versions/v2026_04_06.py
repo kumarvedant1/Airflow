@@ -119,7 +119,6 @@ class MakeDagRunStartDateNullable(VersionChange):
             response.body["start_date"] = response.body.get("run_after")
 
 
-
 class ModifyDeferredTaskKwargsToJsonValue(VersionChange):
     """Change the types of `trigger_kwargs` and `next_kwargs` in TIDeferredStatePayload to JsonValue."""
 

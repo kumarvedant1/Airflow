@@ -9635,6 +9635,7 @@ def scheduler_job_runner_for_connection_tests(session):
     runner.job = mock_job
     runner.executors = [executor]
     runner.executor = executor
+    runner._multi_team = False
     runner._log = mock.MagicMock(spec=logging.Logger)
     yield runner
     session.execute(delete(ConnectionTestRequest))
