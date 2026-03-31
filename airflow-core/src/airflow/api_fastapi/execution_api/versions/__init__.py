@@ -37,7 +37,6 @@ from airflow.api_fastapi.execution_api.versions.v2026_04_06 import (
     ModifyDeferredTaskKwargsToJsonValue,
     MovePreviousRunEndpoint,
     RemoveUpstreamMapIndexesField,
-    ValidateTaskIdentityTokenClaims,
 )
 
 bundle = VersionBundle(
@@ -52,7 +51,6 @@ bundle = VersionBundle(
         RemoveUpstreamMapIndexesField,
         AddNoteField,
         AddDagEndpoint,
-        ValidateTaskIdentityTokenClaims,
     ),
     Version("2025-11-05", AddTriggeringUserNameField),
     Version("2025-10-27", MakeDagRunConfNullable),

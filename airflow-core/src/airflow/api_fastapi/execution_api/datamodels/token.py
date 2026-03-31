@@ -28,18 +28,17 @@ TokenScope = Literal["execution", "workload"]
 
 
 class TIClaims(BaseModel):
-    """Validated JWT claims for a task identity token."""
+    """
+    Validated JWT claims for a task identity token.
+
+    Only fields used by the Execution API (sub, scope) are explicitly typed.
+    JWTValidator already validates exp/iat/nbf/aud/etc. Extra claims are allowed.
+    """
 
     model_config = ConfigDict(extra="allow")
 
     sub: UUID
-    exp: int
-    iat: int
-    nbf: int
     scope: TokenScope = "execution"
-    aud: str | list[str] | None = None
-    iss: str | None = None
-    jti: str | None = None
 
 
 class TIToken(BaseModel):

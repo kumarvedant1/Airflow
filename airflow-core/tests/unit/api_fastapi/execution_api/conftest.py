@@ -48,7 +48,7 @@ def client(request: pytest.FixtureRequest):
         from uuid import UUID
 
         ti_id = UUID(request.path_params.get("task_instance_id", "00000000-0000-0000-0000-000000000000"))
-        claims = TIClaims(sub=ti_id, exp=0, iat=0, nbf=0, scope="execution")
+        claims = TIClaims(sub=ti_id, scope="execution")
         return TIToken(id=claims.sub, claims=claims)
 
     exec_app.dependency_overrides[_jwt_bearer] = mock_jwt_bearer
