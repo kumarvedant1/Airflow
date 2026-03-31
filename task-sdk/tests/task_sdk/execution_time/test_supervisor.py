@@ -550,6 +550,43 @@ class TestWatchedSubprocess:
         assert "Last chance exception handler" in captured.err
         assert "RuntimeError: Fake syntax error" in captured.err
 
+    def test_resume_start_date_from_context(self, mocker, make_ti_context):
+        """Verify that start_date from ti_context (e.g. for deferral resume) is used in the
+        StartupDetails message instead of computing a new datetime.now(). This test is kept
+        separate from test_last_chance_exception_handling as their purposes do not overlap.
+        """
+        mock_client = MagicMock(spec=sdk_client.Client)
+        resume_start_date = timezone.datetime(2025, 3, 28, tzinfo=timezone.utc)
+        ti_context = make_ti_context()
+        ti_context.start_date = resume_start_date
+        mock_client.task_instances.start.return_value = ti_context
+
+        mock_send = mocker.patch.object(ActivitySubprocess, "send_msg", autospec=True)
+        proc = ActivitySubprocess.start(
+            dag_rel_path=os.devnull,
+            bundle_info=FAKE_BUNDLE,
+            what=TaskInstance(
+                id=uuid7(),
+                task_id="b",
+                dag_id="c",
+                run_id="d",
+                try_number=1,
+                dag_version_id=uuid7(),
+            ),
+            client=mock_client,
+            target=lambda: None,
+        )
+        rc = proc.wait()
+        assert rc == 0
+
+        # The startup message is sent via send_msg(StartupDetails(...), request_id=0)
+        startup_calls = [
+            c for c in mock_send.call_args_list if len(c.args) > 1 and hasattr(c.args[1], "start_date")
+        ]
+        assert len(startup_calls) >= 1
+        msg = startup_calls[0].args[1]
+        assert msg.start_date == resume_start_date
+
     def test_regular_heartbeat(self, spy_agency: kgb.SpyAgency, monkeypatch, mocker, make_ti_context):
         """Test that the WatchedSubprocess class regularly sends heartbeat requests, up to a certain frequency"""
         import airflow.sdk.execution_time.supervisor
