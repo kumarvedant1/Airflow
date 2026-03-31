@@ -330,7 +330,7 @@ class InProcessExecutionAPI:
                 ti_id = UUID(
                     request.path_params.get("task_instance_id", "00000000-0000-0000-0000-000000000000")
                 )
-                claims = TIClaims(sub=ti_id, exp=0, iat=0, nbf=0, scope="execution")
+                claims = TIClaims(sub=ti_id, scope="execution")
                 return TIToken(id=ti_id, claims=claims)
 
             self._app.dependency_overrides[_jwt_bearer] = always_allow

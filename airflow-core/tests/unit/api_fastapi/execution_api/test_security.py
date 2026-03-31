@@ -130,7 +130,7 @@ class TestTokenTypeScopeEnforcement:
         ti_id = self.TI_ID
 
         async def mock_jwt(request: Request):
-            claims = TIClaims(sub=UUID(ti_id), exp=0, iat=0, nbf=0, scope=scope)
+            claims = TIClaims(sub=UUID(ti_id), scope=scope)
             return TIToken(id=claims.sub, claims=claims)
 
         app.dependency_overrides[_jwt_bearer] = mock_jwt
