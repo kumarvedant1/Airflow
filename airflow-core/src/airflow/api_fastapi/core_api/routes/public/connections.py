@@ -149,8 +149,11 @@ def get_connections(
     "",
     status_code=status.HTTP_201_CREATED,
     responses=create_openapi_http_exception_doc(
-        [status.HTTP_409_CONFLICT]
-    ),  # handled by global exception handler
+        [
+            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_409_CONFLICT,  # handled by global exception handler
+        ]
+    ),
     dependencies=[Depends(requires_access_connection(method="POST")), Depends(action_logging())],
 )
 def post_connection(
@@ -158,6 +161,12 @@ def post_connection(
     session: SessionDep,
 ) -> ConnectionResponse:
     """Create connection entry."""
+    if post_body.team_name is not None and not conf.getboolean("core", "multi_team"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "team_name cannot be set when multi_team mode is disabled. Please contact your administrator.",
+        )
+
     connection = Connection(**post_body.model_dump(by_alias=True))
     session.add(connection)
     return connection
@@ -191,6 +200,12 @@ def patch_connection(
     update_mask: list[str] | None = Query(None),
 ) -> ConnectionResponse:
     """Update a connection entry."""
+    if patch_body.team_name is not None and not conf.getboolean("core", "multi_team"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "team_name cannot be set when multi_team mode is disabled. Please contact your administrator.",
+        )
+
     if patch_body.connection_id != connection_id:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,

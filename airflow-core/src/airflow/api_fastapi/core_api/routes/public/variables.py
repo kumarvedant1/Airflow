@@ -46,6 +46,7 @@ from airflow.api_fastapi.core_api.services.public.variables import (
     update_orm_from_pydantic,
 )
 from airflow.api_fastapi.logging.decorators import action_logging
+from airflow.configuration import conf
 from airflow.models.variable import Variable
 
 variables_router = AirflowRouter(tags=["Variable"], prefix="/variables")
@@ -147,6 +148,12 @@ def patch_variable(
     update_mask: list[str] | None = Query(None),
 ) -> VariableResponse:
     """Update a variable by key."""
+    if patch_body.team_name is not None and not conf.getboolean("core", "multi_team"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "team_name cannot be set when multi_team mode is disabled. Please contact your administrator.",
+        )
+
     variable = update_orm_from_pydantic(variable_key, patch_body, update_mask, session)
     return variable
 
@@ -154,7 +161,7 @@ def patch_variable(
 @variables_router.post(
     "",
     status_code=status.HTTP_201_CREATED,
-    responses=create_openapi_http_exception_doc([status.HTTP_409_CONFLICT]),
+    responses=create_openapi_http_exception_doc([status.HTTP_400_BAD_REQUEST, status.HTTP_409_CONFLICT]),
     dependencies=[Depends(action_logging()), Depends(requires_access_variable("POST"))],
 )
 def post_variable(
@@ -162,6 +169,12 @@ def post_variable(
     session: SessionDep,
 ) -> VariableResponse:
     """Create a variable."""
+    if post_body.team_name is not None and not conf.getboolean("core", "multi_team"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "team_name cannot be set when multi_team mode is disabled. Please contact your administrator.",
+        )
+
     # Check if the key already exists
     existing_variable = session.scalar(select(Variable).where(Variable.key == post_body.key).limit(1))
     if existing_variable:

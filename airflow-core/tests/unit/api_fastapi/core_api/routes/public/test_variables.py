@@ -521,20 +521,21 @@ class TestPatchVariable(TestVariableEndpoint):
         body = response.json()
         assert f"The Variable with key: `{TEST_VARIABLE_KEY}` was not found" == body["detail"]
 
+    @conf_vars({("core", "multi_team"): "False"})
     def test_patch_rejects_team_name_when_multi_team_disabled(self, test_client, testing_team):
-        self.create_variables()
+        with conf_vars({("core", "multi_team"): "True"}):
+            self.create_variables()
         body = {
             "key": TEST_VARIABLE_KEY,
             "value": "The new value",
             "description": "The new description",
             "team_name": str(testing_team.name),
         }
-        with conf_vars({("core", "multi_team"): "False"}):
-            response = test_client.patch(f"/variables/{TEST_VARIABLE_KEY}", json=body)
-        assert response.status_code == 422
+        response = test_client.patch(f"/variables/{TEST_VARIABLE_KEY}", json=body)
+        assert response.status_code == 400
         assert (
-            response.json()["detail"][0]["msg"]
-            == "Value error, team_name cannot be set when multi_team mode is disabled"
+            response.json()["detail"]
+            == "team_name cannot be set when multi_team mode is disabled. Please contact your administrator."
         )
 
     @pytest.mark.enable_redact
@@ -702,20 +703,19 @@ class TestPostVariable(TestVariableEndpoint):
             ]
         }
 
+    @conf_vars({("core", "multi_team"): "False"})
     def test_post_rejects_team_name_when_multi_team_disabled(self, test_client, testing_team):
-        self.create_variables()
         body = {
             "key": "new variable key",
             "value": "new variable value",
             "description": "new variable description",
             "team_name": str(testing_team.name),
         }
-        with conf_vars({("core", "multi_team"): "False"}):
-            response = test_client.post("/variables", json=body)
-        assert response.status_code == 422
+        response = test_client.post("/variables", json=body)
+        assert response.status_code == 400
         assert (
-            response.json()["detail"][0]["msg"]
-            == "Value error, team_name cannot be set when multi_team mode is disabled"
+            response.json()["detail"]
+            == "team_name cannot be set when multi_team mode is disabled. Please contact your administrator."
         )
 
     @pytest.mark.parametrize(
