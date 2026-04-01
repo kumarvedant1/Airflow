@@ -25,7 +25,10 @@ from typing import TYPE_CHECKING, Any, cast
 from azure.common.client_factory import get_client_from_auth_file, get_client_from_json_dict
 from azure.core.exceptions import ResourceNotFoundError
 from azure.identity import ClientSecretCredential, DefaultAzureCredential
-from azure.identity.aio import ClientSecretCredential as AsyncClientSecretCredential
+from azure.identity.aio import (
+    ClientSecretCredential as AsyncClientSecretCredential,
+    DefaultAzureCredential as AsyncDefaultAzureCredential,
+)
 from azure.mgmt.containerinstance import ContainerInstanceManagementClient
 from azure.mgmt.containerinstance.aio import (
     ContainerInstanceManagementClient as AsyncContainerInstanceManagementClient,
@@ -197,13 +200,12 @@ class AzureContainerInstanceAsyncHook(AzureContainerInstanceHook):
 
     @asynccontextmanager
     async def get_async_conn(self) -> AsyncGenerator[AsyncContainerInstanceManagementClient, None]:
-        """
-        Create an async management client.
-        """
+        """Create an async management client bound to a single credential."""
         conn = await get_async_connection(self.conn_id)
         tenant = conn.extra_dejson.get("tenantId")
         subscription_id = cast("str", conn.extra_dejson.get("subscriptionId"))
 
+        credential: AsyncClientSecretCredential | AsyncDefaultAzureCredential
         if all([conn.login, conn.password, tenant]):
             credential = AsyncClientSecretCredential(
                 client_id=cast("str", conn.login),
