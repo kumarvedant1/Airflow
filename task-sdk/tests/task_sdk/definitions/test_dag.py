@@ -21,6 +21,7 @@ import warnings
 import weakref
 from datetime import datetime, timedelta, timezone
 from typing import Any
+from unittest import mock
 
 import pytest
 
@@ -791,6 +792,38 @@ class TestDagDecorator:
         assert isinstance(self.operator.op_args[0], DagParam)
         self.operator.render_template_fields({})
         assert self.operator.op_args[0] == 42
+
+    def test_ignore_function_result(self, monkeypatch):
+        from airflow.sdk import task
+
+        monkeypatch.setattr(DAG, "add_result", mock.MagicMock())
+
+        @dag_decorator
+        def d():
+            @task
+            def return_num(num):
+                return num
+
+            return_num(123)
+            return 123
+
+        dag = d()
+        assert dag.get_task("return_num").returns_dag_result is False
+        assert DAG.add_result.mock_calls == []
+
+    def test_function_result_set_to_xcom_arg(self):
+        from airflow.sdk import task
+
+        @dag_decorator
+        def d():
+            @task
+            def return_num(num):
+                return num
+
+            return return_num(123)
+
+        dag = d()
+        assert dag.get_task("return_num").returns_dag_result is True
 
 
 class DoNothingOperator(BaseOperator):
