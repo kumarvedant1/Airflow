@@ -3096,7 +3096,7 @@ class TestDagModel:
             _query, dataset_triggered_dag_info = DagModel.dags_needing_dagruns(session)
 
         assert orphan_dag_id not in dataset_triggered_dag_info
-        assert "DAGs in DDRQ but missing SerializedDagModel" in caplog.text
+        assert "not found in the serialized_dag table" in caplog.text
         assert orphan_dag_id in caplog.text
         assert (
             session.query(DatasetDagRunQueue)
@@ -3157,9 +3157,7 @@ class TestDagModel:
 
         assert "ghost_a" not in dataset_triggered_dag_info
         assert "ghost_z" not in dataset_triggered_dag_info
-        msg = next(
-            r.message for r in caplog.records if "DAGs in DDRQ but missing SerializedDagModel" in r.message
-        )
+        msg = next(r.message for r in caplog.records if "not found in the serialized_dag table" in r.message)
         assert msg.index("ghost_a") < msg.index("ghost_z")
         assert (
             session.query(DatasetDagRunQueue)
