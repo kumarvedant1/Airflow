@@ -17,8 +17,9 @@
 # under the License.
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from unittest import mock
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from azure.mgmt.containerinstance.models import (
@@ -28,7 +29,6 @@ from azure.mgmt.containerinstance.models import (
     ContainerState,
 )
 
-from airflow.providers.microsoft.azure.hooks.container_instance import AzureContainerInstanceAsyncHook
 from airflow.providers.microsoft.azure.triggers.container_instance import AzureContainerInstanceTrigger
 from airflow.triggers.base import TriggerEvent
 
@@ -64,6 +64,18 @@ def _make_provisioning_state(state: str) -> ContainerGroup:
     return cg
 
 
+def _make_mock_hook(mock_client):
+    """Create a mock hook whose get_async_conn yields the given mock client."""
+    mock_hook = MagicMock()
+
+    @asynccontextmanager
+    async def _get_async_conn():
+        yield mock_client
+
+    mock_hook.get_async_conn = _get_async_conn
+    return mock_hook
+
+
 class TestAzureContainerInstanceTrigger:
     def test_serialize(self):
         trigger = AzureContainerInstanceTrigger(
@@ -87,11 +99,9 @@ class TestAzureContainerInstanceTrigger:
     @pytest.mark.asyncio
     @mock.patch(f"{MODULE}.AzureContainerInstanceAsyncHook")
     async def test_run_yields_success_on_terminated_with_exit_code_zero(self, mock_hook_cls):
-        mock_hook = AsyncMock(spec=AzureContainerInstanceAsyncHook)
-        mock_hook_cls.return_value = mock_hook
-        mock_hook.__aenter__ = AsyncMock(return_value=mock_hook)
-        mock_hook.__aexit__ = AsyncMock(return_value=None)
-        mock_hook.get_state = AsyncMock(return_value=_make_cg_state("Terminated", exit_code=0))
+        mock_client = MagicMock()
+        mock_client.container_groups.get = AsyncMock(return_value=_make_cg_state("Terminated", exit_code=0))
+        mock_hook_cls.return_value = _make_mock_hook(mock_client)
 
         trigger = AzureContainerInstanceTrigger(
             resource_group=RESOURCE_GROUP,
@@ -109,11 +119,9 @@ class TestAzureContainerInstanceTrigger:
     @pytest.mark.asyncio
     @mock.patch(f"{MODULE}.AzureContainerInstanceAsyncHook")
     async def test_run_yields_success_on_succeeded_state(self, mock_hook_cls):
-        mock_hook = AsyncMock(spec=AzureContainerInstanceAsyncHook)
-        mock_hook_cls.return_value = mock_hook
-        mock_hook.__aenter__ = AsyncMock(return_value=mock_hook)
-        mock_hook.__aexit__ = AsyncMock(return_value=None)
-        mock_hook.get_state = AsyncMock(return_value=_make_cg_state("Succeeded", exit_code=0))
+        mock_client = MagicMock()
+        mock_client.container_groups.get = AsyncMock(return_value=_make_cg_state("Succeeded", exit_code=0))
+        mock_hook_cls.return_value = _make_mock_hook(mock_client)
 
         trigger = AzureContainerInstanceTrigger(
             resource_group=RESOURCE_GROUP,
@@ -127,11 +135,9 @@ class TestAzureContainerInstanceTrigger:
     @pytest.mark.asyncio
     @mock.patch(f"{MODULE}.AzureContainerInstanceAsyncHook")
     async def test_run_yields_error_on_terminated_with_nonzero_exit_code(self, mock_hook_cls):
-        mock_hook = AsyncMock(spec=AzureContainerInstanceAsyncHook)
-        mock_hook_cls.return_value = mock_hook
-        mock_hook.__aenter__ = AsyncMock(return_value=mock_hook)
-        mock_hook.__aexit__ = AsyncMock(return_value=None)
-        mock_hook.get_state = AsyncMock(return_value=_make_cg_state("Terminated", exit_code=1))
+        mock_client = MagicMock()
+        mock_client.container_groups.get = AsyncMock(return_value=_make_cg_state("Terminated", exit_code=1))
+        mock_hook_cls.return_value = _make_mock_hook(mock_client)
 
         trigger = AzureContainerInstanceTrigger(
             resource_group=RESOURCE_GROUP,
@@ -147,11 +153,9 @@ class TestAzureContainerInstanceTrigger:
     @mock.patch(f"{MODULE}.AzureContainerInstanceAsyncHook")
     @pytest.mark.parametrize("terminal_state", ["Failed", "Unhealthy"])
     async def test_run_yields_error_on_failed_states(self, mock_hook_cls, terminal_state):
-        mock_hook = AsyncMock(spec=AzureContainerInstanceAsyncHook)
-        mock_hook_cls.return_value = mock_hook
-        mock_hook.__aenter__ = AsyncMock(return_value=mock_hook)
-        mock_hook.__aexit__ = AsyncMock(return_value=None)
-        mock_hook.get_state = AsyncMock(return_value=_make_cg_state(terminal_state, exit_code=1))
+        mock_client = MagicMock()
+        mock_client.container_groups.get = AsyncMock(return_value=_make_cg_state(terminal_state, exit_code=1))
+        mock_hook_cls.return_value = _make_mock_hook(mock_client)
 
         trigger = AzureContainerInstanceTrigger(
             resource_group=RESOURCE_GROUP,
@@ -166,17 +170,15 @@ class TestAzureContainerInstanceTrigger:
     @mock.patch(f"{MODULE}.asyncio.sleep", new_callable=AsyncMock)
     @mock.patch(f"{MODULE}.AzureContainerInstanceAsyncHook")
     async def test_run_polls_through_non_terminal_states(self, mock_hook_cls, mock_sleep):
-        mock_hook = AsyncMock(spec=AzureContainerInstanceAsyncHook)
-        mock_hook_cls.return_value = mock_hook
-        mock_hook.__aenter__ = AsyncMock(return_value=mock_hook)
-        mock_hook.__aexit__ = AsyncMock(return_value=None)
-        mock_hook.get_state = AsyncMock(
+        mock_client = MagicMock()
+        mock_client.container_groups.get = AsyncMock(
             side_effect=[
                 _make_provisioning_state("Creating"),
                 _make_cg_state("Running", exit_code=0),
                 _make_cg_state("Terminated", exit_code=0),
             ]
         )
+        mock_hook_cls.return_value = _make_mock_hook(mock_client)
 
         trigger = AzureContainerInstanceTrigger(
             resource_group=RESOURCE_GROUP,
@@ -186,7 +188,7 @@ class TestAzureContainerInstanceTrigger:
         )
         events = [event async for event in trigger.run()]
 
-        assert mock_hook.get_state.call_count == 3
+        assert mock_client.container_groups.get.call_count == 3
         assert mock_sleep.call_count == 2
         mock_sleep.assert_called_with(POLLING_INTERVAL)
         assert events[0].payload["status"] == "success"
@@ -194,11 +196,9 @@ class TestAzureContainerInstanceTrigger:
     @pytest.mark.asyncio
     @mock.patch(f"{MODULE}.AzureContainerInstanceAsyncHook")
     async def test_run_yields_error_event_on_exception(self, mock_hook_cls):
-        mock_hook = AsyncMock(spec=AzureContainerInstanceAsyncHook)
-        mock_hook_cls.return_value = mock_hook
-        mock_hook.__aenter__ = AsyncMock(return_value=mock_hook)
-        mock_hook.__aexit__ = AsyncMock(return_value=None)
-        mock_hook.get_state = AsyncMock(side_effect=Exception("Azure API error"))
+        mock_client = MagicMock()
+        mock_client.container_groups.get = AsyncMock(side_effect=Exception("Azure API error"))
+        mock_hook_cls.return_value = _make_mock_hook(mock_client)
 
         trigger = AzureContainerInstanceTrigger(
             resource_group=RESOURCE_GROUP,
@@ -212,30 +212,27 @@ class TestAzureContainerInstanceTrigger:
         assert "Azure API error" in events[0].payload["message"]
 
     @pytest.mark.asyncio
+    @mock.patch(f"{MODULE}.asyncio.sleep", new_callable=AsyncMock)
     @mock.patch(f"{MODULE}.AzureContainerInstanceAsyncHook")
-    async def test_run_provisioning_state_does_not_yield_until_terminal(self, mock_hook_cls):
+    async def test_run_provisioning_state_does_not_yield_until_terminal(self, mock_hook_cls, mock_sleep):
         """Container in 'Creating' (no instance_view) should keep polling."""
-        mock_hook = AsyncMock(spec=AzureContainerInstanceAsyncHook)
-        mock_hook_cls.return_value = mock_hook
-        mock_hook.__aenter__ = AsyncMock(return_value=mock_hook)
-        mock_hook.__aexit__ = AsyncMock(return_value=None)
+        mock_client = MagicMock()
+        mock_client.container_groups.get = AsyncMock(
+            side_effect=[
+                _make_provisioning_state("Creating"),
+                _make_cg_state("Terminated", exit_code=0),
+            ]
+        )
+        mock_hook_cls.return_value = _make_mock_hook(mock_client)
 
-        with mock.patch(f"{MODULE}.asyncio.sleep", new_callable=AsyncMock):
-            mock_hook.get_state = AsyncMock(
-                side_effect=[
-                    _make_provisioning_state("Creating"),
-                    _make_cg_state("Terminated", exit_code=0),
-                ]
-            )
+        trigger = AzureContainerInstanceTrigger(
+            resource_group=RESOURCE_GROUP,
+            name=CONTAINER_NAME,
+            ci_conn_id=CI_CONN_ID,
+        )
+        events = [event async for event in trigger.run()]
 
-            trigger = AzureContainerInstanceTrigger(
-                resource_group=RESOURCE_GROUP,
-                name=CONTAINER_NAME,
-                ci_conn_id=CI_CONN_ID,
-            )
-            events = [event async for event in trigger.run()]
-
-        assert mock_hook.get_state.call_count == 2
+        assert mock_client.container_groups.get.call_count == 2
         assert events[0].payload["status"] == "success"
 
     def test_serialize_deserialize_roundtrip(self):

@@ -64,10 +64,11 @@ class AzureContainerInstanceTrigger(BaseTrigger):
 
     async def run(self) -> AsyncIterator[TriggerEvent]:
         """Poll ACI until a terminal state is reached, then yield a TriggerEvent."""
+        hook = AzureContainerInstanceAsyncHook(azure_conn_id=self.ci_conn_id)
         try:
-            async with AzureContainerInstanceAsyncHook(azure_conn_id=self.ci_conn_id) as hook:
+            async with hook.get_async_conn() as client:
                 while True:
-                    cg_state = await hook.get_state(self.resource_group, self.name)
+                    cg_state = await client.container_groups.get(self.resource_group, self.name)
                     instance_view = cg_state.containers[0].instance_view
 
                     if instance_view is not None:
