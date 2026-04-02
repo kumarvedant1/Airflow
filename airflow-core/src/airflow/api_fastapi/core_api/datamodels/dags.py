@@ -128,6 +128,17 @@ class DAGResponse(BaseModel):
             return None
         return str(tts)
 
+    _NON_BACKFILLABLE_SUMMARIES: frozenset[str | None] = frozenset(
+        {None, "@once", "@continuous", "Asset", "Partitioned Asset"}
+    )
+
+    # Mypy issue https://github.com/python/mypy/issues/1362
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def is_backfillable(self) -> bool:
+        """Whether this DAG's schedule supports backfilling."""
+        return self.timetable_summary not in self._NON_BACKFILLABLE_SUMMARIES
+
     # Mypy issue https://github.com/python/mypy/issues/1362
     @computed_field  # type: ignore[prop-decorator]
     @property
