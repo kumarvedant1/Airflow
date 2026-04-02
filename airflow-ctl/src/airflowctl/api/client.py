@@ -150,9 +150,7 @@ _VALID_ENV_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 
 def _validate_api_environment(api_environment: str) -> str:
     if not _VALID_ENV_RE.fullmatch(api_environment):
-        raise ValueError(
-            "Invalid AIRFLOW_CLI_ENVIRONMENT. Only letters, numbers, '.', '_' and '-' are allowed."
-        )
+        raise ValueError("Invalid AIRFLOW_CLI_ENVIRONMENT")
     return api_environment
 
 
@@ -174,27 +172,34 @@ class Credentials:
 
     def __init__(
         self,
-        *,
-        client_kind: ClientKind = ClientKind.CLI,
-        api_environment: str | None = None,
         api_url: str | None = None,
         api_token: str | None = None,
+        client_kind: ClientKind | None = None,
+        api_environment: str = "production",
     ):
-        self.client_kind = client_kind
-        raw_env = (
-            api_environment
-            if api_environment is not None
-            else (os.getenv("AIRFLOW_CLI_ENVIRONMENT") or os.getenv("AIRFLOW_CLI_ENV") or "production")
-        )
-        self.api_environment = _validate_api_environment(raw_env)
-        self.input_cli_config_file = f"{self.api_environment}.json"
         self.api_url = api_url
         self.api_token = api_token
+        raw_env = os.getenv("AIRFLOW_CLI_ENVIRONMENT")
+        if raw_env is None:
+            raw_env = api_environment
+        self.api_environment = _validate_api_environment(raw_env)
+        self.client_kind = client_kind
 
-    def save(self, skip_keyring: bool = False) -> Credentials:
+    @property
+    def input_cli_config_file(self) -> str:
+        """Generate path for the CLI config file."""
+        env = _validate_api_environment(self.api_environment)
+        return f"{env}.json"
+
+    def save(self, skip_keyring: bool = False):
+        """
+        Save the credentials to keyring and URL to disk as a file.
+
+        Skip saving the token to keyring if skip_keyring is True, in this case,
+        only the config file with the API URL is created.
+        """
         default_config_dir = os.environ.get("AIRFLOW_HOME", os.path.expanduser("~/airflow"))
         os.makedirs(default_config_dir, exist_ok=True)
-
         config_path = _safe_path_under_airflow_home(default_config_dir, self.input_cli_config_file)
         with open(config_path, "w") as f:
             json.dump({"api_url": self.api_url}, f)
@@ -208,7 +213,7 @@ class Credentials:
                     json.dump({f"api_token_{self.api_environment}": self.api_token}, f)
             else:
                 if skip_keyring:
-                    return self
+                    return
                 # Replace the upstream EncryptedKeyring's unbounded password
                 # prompt with a bounded one before set_password can trigger it.
                 # The active backend may be a ChainerBackend that delegates to
@@ -232,9 +237,9 @@ class Credentials:
             # This happens when the token is None, which is not allowed by keyring
             if self.api_token is None and self.client_kind == ClientKind.CLI:
                 raise AirflowCtlCredentialNotFoundException("No API token found. Please login first.") from e
-        return self
 
     def load(self) -> Credentials:
+        """Load the credentials from keyring and URL from disk file."""
         default_config_dir = os.environ.get("AIRFLOW_HOME", os.path.expanduser("~/airflow"))
         config_path = _safe_path_under_airflow_home(default_config_dir, self.input_cli_config_file)
         try:
