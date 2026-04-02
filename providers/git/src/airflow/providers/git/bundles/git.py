@@ -127,19 +127,23 @@ class GitDagBundle(BaseDagBundle):
         """Check if the local repo already has the correct version checked out."""
         if not self.version or not self.repo_path.is_dir() or not (self.repo_path / ".git").exists():
             return False
+        repo = None
         try:
             repo = Repo(self.repo_path)
-            has_version = repo.head.commit.hexsha == self.version
-            repo.close()
+            expected_commit = repo.commit(self.version)
+            has_version = repo.head.commit.hexsha == expected_commit.hexsha
             return has_version
-        except Exception:  # general exception just to catch anything wrong with repo
+        except (InvalidGitRepositoryError, NoSuchPathError, BadName, GitCommandError, ValueError):
             return False
+        finally:
+            if repo is not None:
+                repo.close()
 
     def _initialize(self):
         with self.lock():
             # Avoids re-cloning on every task run when:
-            # 1. prune_dotgit_folder=True
-            # 2. When local version matches expected version
+            # 1. A pruned worktree already exists (prune_dotgit_folder=True)
+            # 2. The local repo already has the expected version
             if self._is_pruned_worktree():
                 self._log.debug(
                     "Using existing pruned worktree",

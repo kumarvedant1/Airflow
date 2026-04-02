@@ -345,8 +345,8 @@ class TestGitDagBundle:
             mock_clone.assert_not_called()
 
     @mock.patch("airflow.providers.git.bundles.git.GitHook")
-    def test_local_repo_with_wrong_version_does_not_skip_clone(self, mock_githook, git_repo):
-        """When the local repo has a different version, do not skip cloning."""
+    def test_initialize_with_different_versions_creates_separate_repos(self, mock_githook, git_repo):
+        """Initializing the same bundle with different versions creates separate repos, each at the requested version."""
         repo_path, repo = git_repo
         mock_githook.return_value.repo_url = repo_path
         first_commit = repo.head.commit.hexsha
@@ -372,7 +372,7 @@ class TestGitDagBundle:
         bundle1.initialize()
         assert bundle1.get_current_version() == second_commit
 
-        # Second init with first_commit: different version path, should NOT skip
+        # Second init with first_commit: different version means different repo_path
         bundle2 = GitDagBundle(
             name=bundle_name,
             git_conn_id=CONN_HTTPS,
@@ -382,6 +382,44 @@ class TestGitDagBundle:
         )
         bundle2.initialize()
         assert bundle2.get_current_version() == first_commit
+        assert bundle1.repo_path != bundle2.repo_path
+
+    @mock.patch("airflow.providers.git.bundles.git.GitHook")
+    def test_local_repo_has_version_returns_false_when_head_mismatches(self, mock_githook, git_repo):
+        """When the local repo exists at the version path but HEAD doesn't match, _local_repo_has_version returns False."""
+        repo_path, repo = git_repo
+        mock_githook.return_value.repo_url = repo_path
+        first_commit = repo.head.commit.hexsha
+
+        # Add a second commit
+        file_path = repo_path / "new_file.py"
+        with open(file_path, "w") as f:
+            f.write("new content")
+        repo.index.add([file_path])
+        repo.index.commit("Second commit")
+        second_commit = repo.head.commit.hexsha
+
+        bundle_name = "test_wrong_head"
+
+        # Clone at second_commit with .git preserved
+        bundle = GitDagBundle(
+            name=bundle_name,
+            git_conn_id=CONN_HTTPS,
+            version=second_commit,
+            tracking_ref=GIT_DEFAULT_BRANCH,
+            prune_dotgit_folder=False,
+        )
+        bundle.initialize()
+        assert bundle.get_current_version() == second_commit
+        assert bundle._local_repo_has_version() is True
+
+        # Mutate the cloned repo's HEAD to point at first_commit so HEAD != version
+        cloned_repo = Repo(bundle.repo_path)
+        cloned_repo.head.reset(first_commit, index=True, working_tree=True)
+        cloned_repo.close()
+
+        # Same bundle config but now HEAD doesn't match version — should return False
+        assert bundle._local_repo_has_version() is False
 
     @pytest.mark.parametrize(
         "amend",
