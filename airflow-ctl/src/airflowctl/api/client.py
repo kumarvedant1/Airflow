@@ -184,7 +184,7 @@ class Credentials:
         raw_env = (
             api_environment
             if api_environment is not None
-            else os.getenv("AIRFLOW_CLI_ENVIRONMENT", "production")
+            else (os.getenv("AIRFLOW_CLI_ENVIRONMENT") or os.getenv("AIRFLOW_CLI_ENV") or "production")
         )
         self.api_environment = _validate_api_environment(raw_env)
         self.input_cli_config_file = f"{self.api_environment}.json"
