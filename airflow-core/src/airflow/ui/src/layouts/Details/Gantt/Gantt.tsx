@@ -125,7 +125,7 @@ export const Gantt = ({ dagRunState, limit, runType, sharedScrollContainerRef, t
   const rowSegments = buildGanttRowSegments(flatNodes, ganttDataItems);
 
   const { maxMs, minMs } = computeGanttTimeRangeMs({
-    data: ganttDataItems,
+    ganttItems: ganttDataItems,
     selectedRun,
     selectedTimezone,
   });
