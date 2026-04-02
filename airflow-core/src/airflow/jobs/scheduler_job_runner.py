@@ -3147,8 +3147,8 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
 
     def _enqueue_connection_tests(self, *, session: Session) -> None:
         """Enqueue pending connection tests to executors that support them."""
-        max_concurrency = conf.getint("core", "max_connection_test_concurrency", fallback=4)
-        timeout = conf.getint("core", "connection_test_timeout", fallback=60)
+        max_concurrency = conf.getint("scheduler", "max_connection_test_concurrency", fallback=4)
+        timeout = conf.getint("scheduler", "connection_test_timeout", fallback=60)
 
         num_occupied_slots = sum(executor.slots_occupied for executor in self.executors)
         parallelism_budget = conf.getint("core", "parallelism") - num_occupied_slots
@@ -3207,7 +3207,7 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
     @provide_session
     def _reap_stale_connection_tests(self, *, session: Session = NEW_SESSION) -> None:
         """Mark connection tests that have exceeded their timeout as FAILED."""
-        timeout = conf.getint("core", "connection_test_timeout", fallback=60)
+        timeout = conf.getint("scheduler", "connection_test_timeout", fallback=60)
         grace_period = max(30, timeout // 2)
         cutoff = timezone.utcnow() - timedelta(seconds=timeout + grace_period)
 

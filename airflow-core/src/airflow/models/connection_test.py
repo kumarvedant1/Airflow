@@ -24,13 +24,13 @@ from uuid import UUID
 
 import structlog
 import uuid6
-from sqlalchemy import Boolean, Index, Integer, String, Text, Uuid, select
-from sqlalchemy.orm import Mapped, declared_attr, mapped_column, synonym
+from sqlalchemy import Boolean, Index, Integer, String, Text, Uuid, select, text
+from sqlalchemy.orm import Mapped, mapped_column
 
 from airflow._shared.timezones import timezone
 from airflow.models.base import Base
 from airflow.models.connection import Connection
-from airflow.models.crypto import get_fernet
+from airflow.models.crypto import FernetFieldsMixin
 from airflow.utils.sqlalchemy import UtcDateTime
 
 if TYPE_CHECKING:
@@ -59,7 +59,7 @@ DISPATCHED_STATES = frozenset((ConnectionTestState.QUEUED, ConnectionTestState.R
 TERMINAL_STATES = frozenset((ConnectionTestState.SUCCESS, ConnectionTestState.FAILED))
 
 
-class ConnectionTestRequest(Base):
+class ConnectionTestRequest(Base, FernetFieldsMixin):
     """
     Tracks an async connection test request dispatched to a worker.
 
@@ -82,19 +82,28 @@ class ConnectionTestRequest(Base):
     executor: Mapped[str | None] = mapped_column(String(256), nullable=True)
     queue: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
-    # Connection fields — password and extra are Fernet-encrypted.
+    # Connection fields — password and extra are Fernet-encrypted via FernetFieldsMixin.
     conn_type: Mapped[str] = mapped_column(String(500), nullable=False)
     host: Mapped[str | None] = mapped_column(String(500), nullable=True)
     login: Mapped[str | None] = mapped_column(Text, nullable=True)
-    _password: Mapped[str | None] = mapped_column("password", Text(), nullable=True)
     schema: Mapped[str | None] = mapped_column("schema", String(500), nullable=True)
     port: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    _extra: Mapped[str | None] = mapped_column("extra", Text(), nullable=True)
     commit_on_success: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="0"
     )
 
-    __table_args__ = (Index("idx_connection_test_request_state_created_at", state, created_at),)
+    __table_args__ = (
+        Index("idx_connection_test_request_state_created_at", state, created_at),
+        # since mysql lacks filtered/partial indices, this creates a
+        # duplicate index on mysql. Not the end of the world
+        Index(
+            "idx_connection_test_request_active_conn",
+            "connection_id",
+            unique=True,
+            postgresql_where=text("state IN ('pending', 'queued', 'running')"),
+            sqlite_where=text("state IN ('pending', 'queued', 'running')"),
+        ),
+    )
 
     def __init__(
         self,
@@ -139,46 +148,6 @@ class ConnectionTestRequest(Base):
     def get_dag_id(self) -> None:
         """Return None — connection tests are not associated with any DAG."""
         return None
-
-    def get_password(self) -> str | None:
-        if self._password:
-            fernet = get_fernet()
-            if not fernet.is_encrypted:
-                return self._password
-            return fernet.decrypt(bytes(self._password, "utf-8")).decode()
-        return self._password
-
-    def set_password(self, value: str | None):
-        if value:
-            fernet = get_fernet()
-            self._password = fernet.encrypt(bytes(value, "utf-8")).decode()
-        else:
-            self._password = value
-
-    @declared_attr
-    def password(cls):
-        """Password. The value is decrypted/encrypted when reading/setting the value."""
-        return synonym("_password", descriptor=property(cls.get_password, cls.set_password))
-
-    def get_extra(self) -> str | None:
-        if self._extra:
-            fernet = get_fernet()
-            if not fernet.is_encrypted:
-                return self._extra
-            return fernet.decrypt(bytes(self._extra, "utf-8")).decode()
-        return self._extra
-
-    def set_extra(self, value: str | None):
-        if value:
-            fernet = get_fernet()
-            self._extra = fernet.encrypt(bytes(value, "utf-8")).decode()
-        else:
-            self._extra = value
-
-    @declared_attr
-    def extra(cls):
-        """Extra data. The value is decrypted/encrypted when reading/setting the value."""
-        return synonym("_extra", descriptor=property(cls.get_extra, cls.set_extra))
 
     def to_connection(self) -> Connection:
         """Build a transient Connection object from the stored fields for testing."""

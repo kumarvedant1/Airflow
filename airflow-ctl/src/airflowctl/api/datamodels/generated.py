@@ -59,6 +59,18 @@ class AssetWatcherResponse(BaseModel):
     created_date: Annotated[datetime, Field(title="Created Date")]
 
 
+class AsyncConnectionTestResponse(BaseModel):
+    """
+    Response returned when polling for async connection test status.
+    """
+
+    token: Annotated[str, Field(title="Token")]
+    connection_id: Annotated[str, Field(title="Connection Id")]
+    state: Annotated[str, Field(title="State")]
+    result_message: Annotated[str | None, Field(title="Result Message")] = None
+    created_at: Annotated[datetime, Field(title="Created At")]
+
+
 class BaseInfoResponse(BaseModel):
     """
     Base info serializer for responses.
@@ -271,7 +283,13 @@ class ConnectionTestRequestBody(BaseModel):
     port: Annotated[int | None, Field(title="Port")] = None
     password: Annotated[str | None, Field(title="Password")] = None
     extra: Annotated[str | None, Field(title="Extra")] = None
-    commit_on_success: Annotated[bool | None, Field(title="Commit On Success")] = False
+    commit_on_success: Annotated[
+        bool | None,
+        Field(
+            description="If True, save or update the connection in the connection table when the test succeeds.",
+            title="Commit On Success",
+        ),
+    ] = False
     executor: Annotated[str | None, Field(title="Executor")] = None
     queue: Annotated[str | None, Field(title="Queue")] = None
 
@@ -283,18 +301,6 @@ class ConnectionTestResponse(BaseModel):
 
     status: Annotated[bool, Field(title="Status")]
     message: Annotated[str, Field(title="Message")]
-
-
-class ConnectionTestStatusResponse(BaseModel):
-    """
-    Response returned when polling for async connection test status.
-    """
-
-    token: Annotated[str, Field(title="Token")]
-    connection_id: Annotated[str, Field(title="Connection Id")]
-    state: Annotated[str, Field(title="State")]
-    result_message: Annotated[str | None, Field(title="Result Message")] = None
-    created_at: Annotated[datetime, Field(title="Created At")]
 
 
 class CreateAssetEventsBody(BaseModel):

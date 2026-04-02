@@ -69,9 +69,20 @@ def upgrade():
         "connection_test_request",
         ["state", "created_at"],
     )
+    # since mysql lacks filtered/partial indices, this creates a
+    # duplicate index on mysql
+    op.create_index(
+        op.f("idx_connection_test_request_active_conn"),
+        "connection_test_request",
+        ["connection_id"],
+        unique=True,
+        postgresql_where=sa.text("state IN ('pending', 'queued', 'running')"),
+        sqlite_where=sa.text("state IN ('pending', 'queued', 'running')"),
+    )
 
 
 def downgrade():
     """Drop connection_test_request table."""
+    op.drop_index(op.f("idx_connection_test_request_active_conn"), table_name="connection_test_request")
     op.drop_index(op.f("idx_connection_test_request_state_created_at"), table_name="connection_test_request")
     op.drop_table("connection_test_request")

@@ -37,6 +37,7 @@ from airflow.api_fastapi.core_api.datamodels.common import (
     BulkResponse,
 )
 from airflow.api_fastapi.core_api.datamodels.connections import (
+    AsyncConnectionTestResponse,
     ConnectionBody,
     ConnectionBodyPartial,
     ConnectionCollectionResponse,
@@ -44,7 +45,6 @@ from airflow.api_fastapi.core_api.datamodels.connections import (
     ConnectionTestQueuedResponse,
     ConnectionTestRequestBody,
     ConnectionTestResponse,
-    ConnectionTestStatusResponse,
 )
 from airflow.api_fastapi.core_api.openapi.exceptions import create_openapi_http_exception_doc
 from airflow.api_fastapi.core_api.security import (
@@ -322,7 +322,6 @@ def test_connection_async(
         queue=test_body.queue,
     )
     session.add(connection_test)
-    session.flush()
 
     return ConnectionTestQueuedResponse(
         token=connection_test.token,
@@ -339,7 +338,7 @@ def test_connection_async(
 def get_connection_test(
     connection_test_token: str,
     session: SessionDep,
-) -> ConnectionTestStatusResponse:
+) -> AsyncConnectionTestResponse:
     """
     Poll for the status of an async connection test.
 
@@ -355,7 +354,7 @@ def get_connection_test(
             f"No connection test found for token: `{connection_test_token}`",
         )
 
-    return ConnectionTestStatusResponse(
+    return AsyncConnectionTestResponse(
         token=connection_test.token,
         connection_id=connection_test.connection_id,
         state=connection_test.state,

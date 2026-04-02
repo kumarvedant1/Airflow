@@ -233,7 +233,7 @@ export const prefetchUseConnectionServiceGetConnections = (queryClient: QueryCli
 * governed by standard authentication and connection-level authorization.
 * @param data The data for the request.
 * @param data.connectionTestToken
-* @returns ConnectionTestStatusResponse Successful Response
+* @returns AsyncConnectionTestResponse Successful Response
 * @throws ApiError
 */
 export const prefetchUseConnectionServiceGetConnectionTest = (queryClient: QueryClient, { connectionTestToken }: {

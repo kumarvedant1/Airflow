@@ -95,7 +95,10 @@ class ConnectionTestRequestBody(StrictBaseModel):
     port: int | None = None
     password: str | None = None
     extra: str | None = None
-    commit_on_success: bool = False
+    commit_on_success: bool = Field(
+        default=False,
+        description="If True, save or update the connection in the connection table when the test succeeds.",
+    )
     executor: str | None = None
     queue: str | None = None
 
@@ -108,7 +111,7 @@ class ConnectionTestQueuedResponse(BaseModel):
     state: str
 
 
-class ConnectionTestStatusResponse(BaseModel):
+class AsyncConnectionTestResponse(BaseModel):
     """Response returned when polling for async connection test status."""
 
     token: str

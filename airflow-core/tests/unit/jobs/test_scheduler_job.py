@@ -9646,8 +9646,8 @@ class TestDispatchConnectionTests:
     @mock.patch.dict(
         os.environ,
         {
-            "AIRFLOW__CORE__MAX_CONNECTION_TEST_CONCURRENCY": "4",
-            "AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60",
+            "AIRFLOW__SCHEDULER__MAX_CONNECTION_TEST_CONCURRENCY": "4",
+            "AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60",
         },
     )
     def test_dispatch_pending_tests(self, scheduler_job_runner_for_connection_tests, session):
@@ -9667,8 +9667,8 @@ class TestDispatchConnectionTests:
     @mock.patch.dict(
         os.environ,
         {
-            "AIRFLOW__CORE__MAX_CONNECTION_TEST_CONCURRENCY": "1",
-            "AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60",
+            "AIRFLOW__SCHEDULER__MAX_CONNECTION_TEST_CONCURRENCY": "1",
+            "AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60",
         },
     )
     def test_dispatch_respects_concurrency_limit(self, scheduler_job_runner_for_connection_tests, session):
@@ -9690,8 +9690,8 @@ class TestDispatchConnectionTests:
     @mock.patch.dict(
         os.environ,
         {
-            "AIRFLOW__CORE__MAX_CONNECTION_TEST_CONCURRENCY": "4",
-            "AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60",
+            "AIRFLOW__SCHEDULER__MAX_CONNECTION_TEST_CONCURRENCY": "4",
+            "AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60",
         },
     )
     def test_dispatch_fails_fast_when_no_executor_supports(
@@ -9717,8 +9717,8 @@ class TestDispatchConnectionTests:
     @mock.patch.dict(
         os.environ,
         {
-            "AIRFLOW__CORE__MAX_CONNECTION_TEST_CONCURRENCY": "4",
-            "AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60",
+            "AIRFLOW__SCHEDULER__MAX_CONNECTION_TEST_CONCURRENCY": "4",
+            "AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60",
         },
     )
     def test_dispatch_with_unmatched_executor_fails_fast(
@@ -9739,8 +9739,8 @@ class TestDispatchConnectionTests:
     @mock.patch.dict(
         os.environ,
         {
-            "AIRFLOW__CORE__MAX_CONNECTION_TEST_CONCURRENCY": "3",
-            "AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60",
+            "AIRFLOW__SCHEDULER__MAX_CONNECTION_TEST_CONCURRENCY": "3",
+            "AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60",
         },
     )
     def test_dispatch_budget_dispatches_up_to_remaining_slots(
@@ -9769,8 +9769,8 @@ class TestDispatchConnectionTests:
     @mock.patch.dict(
         os.environ,
         {
-            "AIRFLOW__CORE__MAX_CONNECTION_TEST_CONCURRENCY": "2",
-            "AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60",
+            "AIRFLOW__SCHEDULER__MAX_CONNECTION_TEST_CONCURRENCY": "2",
+            "AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60",
         },
     )
     def test_dispatch_order_is_fifo_by_created_at(self, scheduler_job_runner_for_connection_tests, session):
@@ -9804,8 +9804,8 @@ class TestDispatchConnectionTests:
     @mock.patch.dict(
         os.environ,
         {
-            "AIRFLOW__CORE__MAX_CONNECTION_TEST_CONCURRENCY": "4",
-            "AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60",
+            "AIRFLOW__SCHEDULER__MAX_CONNECTION_TEST_CONCURRENCY": "4",
+            "AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60",
         },
     )
     def test_dispatch_fails_fast_for_unserved_executor(
@@ -9833,8 +9833,8 @@ class TestDispatchConnectionTests:
     @mock.patch.dict(
         os.environ,
         {
-            "AIRFLOW__CORE__MAX_CONNECTION_TEST_CONCURRENCY": "4",
-            "AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60",
+            "AIRFLOW__SCHEDULER__MAX_CONNECTION_TEST_CONCURRENCY": "4",
+            "AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60",
         },
     )
     def test_dispatch_executor_matched_by_alias(self, session):
@@ -9873,8 +9873,8 @@ class TestDispatchConnectionTests:
     @mock.patch.dict(
         os.environ,
         {
-            "AIRFLOW__CORE__MAX_CONNECTION_TEST_CONCURRENCY": "4",
-            "AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60",
+            "AIRFLOW__SCHEDULER__MAX_CONNECTION_TEST_CONCURRENCY": "4",
+            "AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60",
         },
     )
     def test_dispatch_executor_matched_by_module_path(self, session):
@@ -9948,8 +9948,8 @@ class TestDispatchConnectionTests:
     @mock.patch.dict(
         os.environ,
         {
-            "AIRFLOW__CORE__MAX_CONNECTION_TEST_CONCURRENCY": "4",
-            "AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60",
+            "AIRFLOW__SCHEDULER__MAX_CONNECTION_TEST_CONCURRENCY": "4",
+            "AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60",
             "AIRFLOW__CORE__PARALLELISM": "1",
         },
     )
@@ -9972,8 +9972,8 @@ class TestDispatchConnectionTests:
     @mock.patch.dict(
         os.environ,
         {
-            "AIRFLOW__CORE__MAX_CONNECTION_TEST_CONCURRENCY": "4",
-            "AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60",
+            "AIRFLOW__SCHEDULER__MAX_CONNECTION_TEST_CONCURRENCY": "4",
+            "AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60",
         },
     )
     def test_dispatch_fails_when_executor_does_not_support_connection_test(
@@ -9996,7 +9996,7 @@ class TestDispatchConnectionTests:
 
 
 class TestReapStaleConnectionTests:
-    @mock.patch.dict(os.environ, {"AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60"})
+    @mock.patch.dict(os.environ, {"AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60"})
     def test_reap_stale_queued_test(self, scheduler_job_runner_for_connection_tests, session):
         """Stale QUEUED tests are marked as FAILED by the reaper."""
         initial_time = timezone.utcnow()
@@ -10015,7 +10015,7 @@ class TestReapStaleConnectionTests:
         assert ct.state == ConnectionTestState.FAILED
         assert "timed out" in ct.result_message
 
-    @mock.patch.dict(os.environ, {"AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60"})
+    @mock.patch.dict(os.environ, {"AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60"})
     def test_does_not_reap_fresh_tests(self, scheduler_job_runner_for_connection_tests, session):
         """Fresh QUEUED tests are not reaped."""
         ct = ConnectionTestRequest(conn_type="test_type", connection_id="test_conn")
@@ -10029,7 +10029,7 @@ class TestReapStaleConnectionTests:
         ct = session.get(ConnectionTestRequest, ct.id)
         assert ct.state == ConnectionTestState.QUEUED
 
-    @mock.patch.dict(os.environ, {"AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60"})
+    @mock.patch.dict(os.environ, {"AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60"})
     def test_reap_stale_running_test(self, scheduler_job_runner_for_connection_tests, session):
         """Stale RUNNING tests are also reaped by the reaper."""
         initial_time = timezone.utcnow()
@@ -10047,7 +10047,7 @@ class TestReapStaleConnectionTests:
         assert ct.state == ConnectionTestState.FAILED
         assert "timed out" in ct.result_message
 
-    @mock.patch.dict(os.environ, {"AIRFLOW__CORE__CONNECTION_TEST_TIMEOUT": "60"})
+    @mock.patch.dict(os.environ, {"AIRFLOW__SCHEDULER__CONNECTION_TEST_TIMEOUT": "60"})
     def test_reaper_ignores_terminal_states(self, scheduler_job_runner_for_connection_tests, session):
         """Tests in terminal states (SUCCESS, FAILED) are not touched by the reaper."""
         initial_time = timezone.utcnow()

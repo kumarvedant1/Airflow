@@ -834,7 +834,7 @@ export class ConnectionService {
      * governed by standard authentication and connection-level authorization.
      * @param data The data for the request.
      * @param data.connectionTestToken
-     * @returns ConnectionTestStatusResponse Successful Response
+     * @returns AsyncConnectionTestResponse Successful Response
      * @throws ApiError
      */
     public static getConnectionTest(data: GetConnectionTestData): CancelablePromise<GetConnectionTestResponse> {
@@ -4106,7 +4106,7 @@ export class DeadlinesService {
             }
         });
     }
-
+    
     /**
      * Get Dag Deadline Alerts
      * Get all deadline alerts defined on a DAG.

@@ -403,6 +403,43 @@ export const $AssetWatcherResponse = {
     description: 'Asset watcher serializer for responses.'
 } as const;
 
+export const $AsyncConnectionTestResponse = {
+    properties: {
+        token: {
+            type: 'string',
+            title: 'Token'
+        },
+        connection_id: {
+            type: 'string',
+            title: 'Connection Id'
+        },
+        state: {
+            type: 'string',
+            title: 'State'
+        },
+        result_message: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Result Message'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        }
+    },
+    type: 'object',
+    required: ['token', 'connection_id', 'state', 'created_at'],
+    title: 'AsyncConnectionTestResponse',
+    description: 'Response returned when polling for async connection test status.'
+} as const;
+
 export const $BackfillCollectionResponse = {
     properties: {
         backfills: {
@@ -1810,6 +1847,7 @@ export const $ConnectionTestRequestBody = {
         commit_on_success: {
             type: 'boolean',
             title: 'Commit On Success',
+            description: 'If True, save or update the connection in the connection table when the test succeeds.',
             default: false
         },
         executor: {
@@ -1857,43 +1895,6 @@ export const $ConnectionTestResponse = {
     required: ['status', 'message'],
     title: 'ConnectionTestResponse',
     description: 'Connection Test serializer for synchronous test responses.'
-} as const;
-
-export const $ConnectionTestStatusResponse = {
-    properties: {
-        token: {
-            type: 'string',
-            title: 'Token'
-        },
-        connection_id: {
-            type: 'string',
-            title: 'Connection Id'
-        },
-        state: {
-            type: 'string',
-            title: 'State'
-        },
-        result_message: {
-            anyOf: [
-                {
-                    type: 'string'
-                },
-                {
-                    type: 'null'
-                }
-            ],
-            title: 'Result Message'
-        },
-        created_at: {
-            type: 'string',
-            format: 'date-time',
-            title: 'Created At'
-        }
-    },
-    type: 'object',
-    required: ['token', 'connection_id', 'state', 'created_at'],
-    title: 'ConnectionTestStatusResponse',
-    description: 'Response returned when polling for async connection test status.'
 } as const;
 
 export const $CreateAssetEventsBody = {

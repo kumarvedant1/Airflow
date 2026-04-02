@@ -233,7 +233,7 @@ export const useConnectionServiceGetConnectionsSuspense = <TData = Common.Connec
 * governed by standard authentication and connection-level authorization.
 * @param data The data for the request.
 * @param data.connectionTestToken
-* @returns ConnectionTestStatusResponse Successful Response
+* @returns AsyncConnectionTestResponse Successful Response
 * @throws ApiError
 */
 export const useConnectionServiceGetConnectionTestSuspense = <TData = Common.ConnectionServiceGetConnectionTestDefaultResponse, TError = unknown, TQueryKey extends Array<unknown> = unknown[]>({ connectionTestToken }: {

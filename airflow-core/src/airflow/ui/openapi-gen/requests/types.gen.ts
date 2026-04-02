@@ -106,6 +106,17 @@ export type AssetWatcherResponse = {
 };
 
 /**
+ * Response returned when polling for async connection test status.
+ */
+export type AsyncConnectionTestResponse = {
+    token: string;
+    connection_id: string;
+    state: string;
+    result_message?: string | null;
+    created_at: string;
+};
+
+/**
  * Backfill Collection serializer for responses.
  */
 export type BackfillCollectionResponse = {
@@ -517,6 +528,9 @@ export type ConnectionTestRequestBody = {
     port?: number | null;
     password?: string | null;
     extra?: string | null;
+    /**
+     * If True, save or update the connection in the connection table when the test succeeds.
+     */
     commit_on_success?: boolean;
     executor?: string | null;
     queue?: string | null;
@@ -528,17 +542,6 @@ export type ConnectionTestRequestBody = {
 export type ConnectionTestResponse = {
     status: boolean;
     message: string;
-};
-
-/**
- * Response returned when polling for async connection test status.
- */
-export type ConnectionTestStatusResponse = {
-    token: string;
-    connection_id: string;
-    state: string;
-    result_message?: string | null;
-    created_at: string;
 };
 
 /**
@@ -2570,7 +2573,7 @@ export type GetConnectionTestData = {
     connectionTestToken: string;
 };
 
-export type GetConnectionTestResponse = ConnectionTestStatusResponse;
+export type GetConnectionTestResponse = AsyncConnectionTestResponse;
 
 export type CreateDefaultConnectionsResponse = void;
 
@@ -4618,7 +4621,7 @@ export type $OpenApiTs = {
                 /**
                  * Successful Response
                  */
-                200: ConnectionTestStatusResponse;
+                200: AsyncConnectionTestResponse;
                 /**
                  * Unauthorized
                  */
