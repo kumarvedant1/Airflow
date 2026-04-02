@@ -245,6 +245,18 @@ Inlet asset events can be read with the ``inlet_events`` accessor in the executi
 
 Each value in the ``inlet_events`` mapping is a sequence-like object that orders past events of a given asset by ``timestamp``, earliest to latest. It supports most of Python's list interface, so you can use ``[-1]`` to access the last event, ``[-2:]`` for the last two, etc. The accessor is lazy and only hits the database when you access items inside it.
 
+The accessor also supports chaining methods to filter events before fetching them. For example, to retrieve only events matching a specific partition key pattern (using database-native regex):
+
+.. code-block:: python
+
+    @task(inlets=[regional_sales])
+    def process_us_sales(*, inlet_events):
+        us_events = inlet_events[regional_sales].partition_key(r"^us\|")
+        for event in us_events:
+            print(event.extra, event.partition_key)
+
+Other chaining methods include ``.after(timestamp)``, ``.before(timestamp)``, ``.ascending()``, and ``.limit(n)``.
+
 Dependency between ``@asset``, ``@task``, and classic operators
 ---------------------------------------------------------------
 
@@ -546,6 +558,15 @@ including ``partition_key`` in the request body):
         "logical_date": "2026-03-10T00:00:00Z",
         "partition_key": "us|2026-03-10T09:00:00"
       }'
+
+You can also query asset events filtered by partition key pattern using the REST
+API. The ``partition_key_pattern`` parameter accepts a regular expression:
+
+.. code-block:: bash
+
+    curl "http://<airflow-host>/api/v2/assets/events?partition_key_pattern=^us"
+
+This uses database-native regex (PostgreSQL ``~`` operator, MySQL ``REGEXP``).
 
 For complete runnable examples, see
 ``airflow-core/src/airflow/example_dags/example_asset_partition.py``.

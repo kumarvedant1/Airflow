@@ -340,6 +340,18 @@ paths:
           - type: integer
           - type: 'null'
           title: Source Map Index
+      - name: partition_key_pattern
+        in: query
+        required: false
+        schema:
+          anyOf:
+          - type: string
+          - type: 'null'
+          description: Regular expression pattern for filtering. Uses database-native
+            regex (PostgreSQL ~ operator, MySQL REGEXP). Not supported on SQLite.
+          title: Partition Key Pattern
+        description: Regular expression pattern for filtering. Uses database-native
+          regex (PostgreSQL ~ operator, MySQL REGEXP). Not supported on SQLite.
       - name: name_pattern
         in: query
         required: false

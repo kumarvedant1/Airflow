@@ -2326,6 +2326,10 @@ export type GetAssetEventsData = {
      * Attributes to order by, multi criteria sort is supported. Prefix with `-` for descending order. Supported attributes: `source_task_id, source_dag_id, source_run_id, source_map_index, timestamp`
      */
     orderBy?: Array<(string)>;
+    /**
+     * Regular expression pattern for filtering. Uses database-native regex (PostgreSQL ~ operator, MySQL REGEXP). Not supported on SQLite.
+     */
+    partitionKeyPattern?: string | null;
     sourceDagId?: string | null;
     sourceMapIndex?: number | null;
     sourceRunId?: string | null;
