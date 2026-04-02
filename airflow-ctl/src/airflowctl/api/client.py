@@ -175,7 +175,7 @@ class Credentials:
     def __init__(
         self,
         *,
-        client_kind: ClientKind,
+        client_kind: ClientKind = ClientKind.CLI,
         api_environment: str | None = None,
         api_url: str | None = None,
         api_token: str | None = None,
