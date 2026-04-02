@@ -41,40 +41,53 @@ class ZendeskHook(BaseHook):
     conn_type = "zendesk"
     hook_name = "Zendesk"
 
-    @classmethod
-    def get_ui_field_behaviour(cls) -> dict[str, Any]:
-        return {
-            "hidden_fields": ["schema", "port", "extra"],
-            "relabeling": {"host": "Zendesk domain", "login": "Zendesk email"},
-        }
-
     def __init__(self, zendesk_conn_id: str = default_conn_name) -> None:
         super().__init__()
         self.zendesk_conn_id = zendesk_conn_id
         self.base_api: BaseApi | None = None
-        zenpy_client, url = self._init_conn()
-        self.zenpy_client = zenpy_client
-        self.__url = url
-        self.get = self.zenpy_client.users._get
+        self._zenpy_client: Zenpy | None = None
+        self._url: str | None = None
 
     def _init_conn(self) -> tuple[Zenpy, str]:
         """
-        Create the Zenpy Client for our Zendesk connection.
+        Initialize the Zendesk client.
 
-        :return: zenpy.Zenpy client and the url for the API.
+        The following authentication modes are supported:
+        1. Use token: If 'use_token' is True in extras, the password field is treated as an API token.
+        2. Token: If 'token' is provided in extras, it's used as an API token.
+        3. OAuth: If 'oauth_token' is provided in extras, it's used as an OAuth token.
+        4. Password: Defaults to email/password authentication if none of the above are provided.
+
+        Precedence: use_token > token > oauth_token > password.
         """
         conn = self.get_connection(self.zendesk_conn_id)
-        domain = ""
-        url = ""
-        subdomain: str | None = None
-        if conn.host:
-            url = "https://" + conn.host
-            domain = conn.host
-            if conn.host.count(".") >= 2:
-                dot_splitted_string = conn.host.rsplit(".", 2)
-                subdomain = dot_splitted_string[0]
-                domain = ".".join(dot_splitted_string[1:])
-        return Zenpy(domain=domain, subdomain=subdomain, email=conn.login, password=conn.password), url
+        if not conn.host:
+            raise ValueError(f"No host provided for {self.zendesk_conn_id}")
+
+        domain = conn.host.split(".")[-2] + "." + conn.host.split(".")[-1]
+        subdomain = conn.host.split(".")[0]
+        url = f"https://{conn.host}"
+
+        kwargs: dict[str, Any] = {
+            "domain": domain,
+            "subdomain": subdomain,
+            "email": conn.login,
+        }
+        extra = conn.extra_dejson
+        if extra.get("use_token"):
+            kwargs["token"] = conn.password
+        elif extra.get("token"):
+            kwargs["token"] = extra.get("token")
+        elif extra.get("oauth_token"):
+            kwargs["oauth_token"] = extra.get("oauth_token")
+        else:
+            kwargs["password"] = conn.password
+
+        return Zenpy(**kwargs), url
+
+    @property
+    def get(self):
+        return self.get_conn().users._get
 
     def get_conn(self) -> Zenpy:
         """
@@ -82,7 +95,9 @@ class ZendeskHook(BaseHook):
 
         :return: zenpy.Zenpy client.
         """
-        return self.zenpy_client
+        if self._zenpy_client is None:
+            self._zenpy_client, self._url = self._init_conn()
+        return self._zenpy_client
 
     def get_ticket(self, ticket_id: int) -> Ticket:
         """
@@ -90,7 +105,7 @@ class ZendeskHook(BaseHook):
 
         :return: Ticket object retrieved.
         """
-        return self.zenpy_client.tickets(id=ticket_id)
+        return self.get_conn().tickets(id=ticket_id)
 
     def search_tickets(self, **kwargs) -> SearchResultGenerator:
         """
@@ -99,7 +114,7 @@ class ZendeskHook(BaseHook):
         :param kwargs: (optional) Search fields given to the zenpy search method.
         :return: SearchResultGenerator of Ticket objects.
         """
-        return self.zenpy_client.search(type="ticket", **kwargs)
+        return self.get_conn().search(type="ticket", **kwargs)
 
     def create_tickets(self, tickets: Ticket | list[Ticket], **kwargs) -> TicketAudit | JobStatus:
         """
@@ -110,7 +125,7 @@ class ZendeskHook(BaseHook):
         :return: A TicketAudit object containing information about the Ticket created.
             When sending bulk request, returns a JobStatus object.
         """
-        return self.zenpy_client.tickets.create(tickets, **kwargs)
+        return self.get_conn().tickets.create(tickets, **kwargs)
 
     def update_tickets(self, tickets: Ticket | list[Ticket], **kwargs) -> TicketAudit | JobStatus:
         """
@@ -121,7 +136,7 @@ class ZendeskHook(BaseHook):
         :return: A TicketAudit object containing information about the Ticket updated.
             When sending bulk request, returns a JobStatus object.
         """
-        return self.zenpy_client.tickets.update(tickets, **kwargs)
+        return self.get_conn().tickets.update(tickets, **kwargs)
 
     def delete_tickets(self, tickets: Ticket | list[Ticket], **kwargs) -> None:
         """
@@ -131,4 +146,4 @@ class ZendeskHook(BaseHook):
         :param kwargs: (optional) Additional fields given to the zenpy delete method.
         :return:
         """
-        return self.zenpy_client.tickets.delete(tickets, **kwargs)
+        return self.get_conn().tickets.delete(tickets, **kwargs)
