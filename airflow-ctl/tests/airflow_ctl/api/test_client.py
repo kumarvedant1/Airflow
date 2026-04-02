@@ -376,3 +376,14 @@ class TestSaveKeyringPatching:
             response = client.get("http://error")
             assert response.status_code == 200
             assert len(responses) == 1
+
+
+@pytest.mark.parametrize("bad_env", ["../evil", "..\\evil", "a/b", "a\\b", ""])
+def test_credentials_rejects_path_traversal_env(bad_env):
+    with pytest.raises(ValueError, match="Invalid AIRFLOW_CLI_ENVIRONMENT"):
+        Credentials(client_kind=ClientKind.CLI, api_environment=bad_env)
+
+
+def test_credentials_accepts_safe_env():
+    creds = Credentials(client_kind=ClientKind.CLI, api_environment="prod-us_1")
+    assert creds.api_environment == "prod-us_1"

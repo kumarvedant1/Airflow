@@ -23,9 +23,11 @@ import getpass
 import json
 import logging
 import os
+import re
 import sys
 from collections.abc import Callable
 from functools import wraps
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, ParamSpec, TypeVar, cast
 
 import httpx
@@ -143,6 +145,25 @@ def _bounded_get_new_password() -> str:
     )
 
 
+_VALID_ENV_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
+
+
+def _validate_api_environment(api_environment: str) -> str:
+    if not _VALID_ENV_RE.fullmatch(api_environment):
+        raise ValueError(
+            "Invalid AIRFLOW_CLI_ENVIRONMENT. Only letters, numbers, '.', '_' and '-' are allowed."
+        )
+    return api_environment
+
+
+def _safe_path_under_airflow_home(airflow_home: str, filename: str) -> str:
+    base = Path(airflow_home).resolve()
+    target = (base / filename).resolve()
+    if base not in target.parents and target != base:
+        raise ValueError(f"Resolved path escapes AIRFLOW_HOME: {target}")
+    return str(target)
+
+
 # Credentials for the API
 class Credentials:
     """Credentials for the API."""
@@ -153,42 +174,41 @@ class Credentials:
 
     def __init__(
         self,
+        *,
+        client_kind: ClientKind,
+        api_environment: str | None = None,
         api_url: str | None = None,
         api_token: str | None = None,
-        client_kind: ClientKind | None = None,
-        api_environment: str = "production",
     ):
+        self.client_kind = client_kind
+        raw_env = (
+            api_environment
+            if api_environment is not None
+            else os.getenv("AIRFLOW_CLI_ENVIRONMENT", "production")
+        )
+        self.api_environment = _validate_api_environment(raw_env)
+        self.input_cli_config_file = f"{self.api_environment}.json"
         self.api_url = api_url
         self.api_token = api_token
-        self.api_environment = os.getenv("AIRFLOW_CLI_ENVIRONMENT") or api_environment
-        self.client_kind = client_kind
 
-    @property
-    def input_cli_config_file(self) -> str:
-        """Generate path for the CLI config file."""
-        return f"{self.api_environment}.json"
-
-    def save(self, skip_keyring: bool = False):
-        """
-        Save the credentials to keyring and URL to disk as a file.
-
-        Skip saving the token to keyring if skip_keyring is True, in this case,
-        only the config file with the API URL is created.
-        """
+    def save(self, skip_keyring: bool = False) -> Credentials:
         default_config_dir = os.environ.get("AIRFLOW_HOME", os.path.expanduser("~/airflow"))
         os.makedirs(default_config_dir, exist_ok=True)
-        with open(os.path.join(default_config_dir, self.input_cli_config_file), "w") as f:
+
+        config_path = _safe_path_under_airflow_home(default_config_dir, self.input_cli_config_file)
+        with open(config_path, "w") as f:
             json.dump({"api_url": self.api_url}, f)
 
         try:
             if os.getenv("AIRFLOW_CLI_DEBUG_MODE") == "true":
-                with open(
-                    os.path.join(default_config_dir, f"debug_creds_{self.input_cli_config_file}"), "w"
-                ) as f:
+                debug_path = _safe_path_under_airflow_home(
+                    default_config_dir, f"debug_creds_{self.input_cli_config_file}"
+                )
+                with open(debug_path, "w") as f:
                     json.dump({f"api_token_{self.api_environment}": self.api_token}, f)
             else:
                 if skip_keyring:
-                    return
+                    return self
                 # Replace the upstream EncryptedKeyring's unbounded password
                 # prompt with a bounded one before set_password can trigger it.
                 # The active backend may be a ChainerBackend that delegates to
@@ -212,11 +232,11 @@ class Credentials:
             # This happens when the token is None, which is not allowed by keyring
             if self.api_token is None and self.client_kind == ClientKind.CLI:
                 raise AirflowCtlCredentialNotFoundException("No API token found. Please login first.") from e
+        return self
 
     def load(self) -> Credentials:
-        """Load the credentials from keyring and URL from disk file."""
         default_config_dir = os.environ.get("AIRFLOW_HOME", os.path.expanduser("~/airflow"))
-        config_path = os.path.join(default_config_dir, self.input_cli_config_file)
+        config_path = _safe_path_under_airflow_home(default_config_dir, self.input_cli_config_file)
         try:
             with open(config_path) as f:
                 credentials = json.load(f)
@@ -224,7 +244,7 @@ class Credentials:
                 if self.api_token is not None:
                     return self
                 if os.getenv("AIRFLOW_CLI_DEBUG_MODE") == "true":
-                    debug_creds_path = os.path.join(
+                    debug_creds_path = _safe_path_under_airflow_home(
                         default_config_dir, f"debug_creds_{self.input_cli_config_file}"
                     )
                     with open(debug_creds_path) as df:
