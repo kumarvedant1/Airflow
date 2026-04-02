@@ -1754,9 +1754,14 @@ paths:
       tags:
       - Connection
       summary: Get Connection Test
-      description: "Poll for the status of an async connection test.\n\nKnowledge\
-        \ of the token serves as authorization \u2014 only the client\nthat initiated\
-        \ the test knows the crypto-random token."
+      description: 'Poll for the status of an async connection test.
+
+
+        The ``connection_test_token`` is a crypto-random identifier used to
+
+        look up the specific test result. Access to this endpoint is still
+
+        governed by standard authentication and connection-level authorization.'
       operationId: get_connection_test
       security:
       - OAuth2PasswordBearer: []

@@ -343,8 +343,9 @@ def get_connection_test(
     """
     Poll for the status of an async connection test.
 
-    Knowledge of the token serves as authorization — only the client
-    that initiated the test knows the crypto-random token.
+    The ``connection_test_token`` is a crypto-random identifier used to
+    look up the specific test result. Access to this endpoint is still
+    governed by standard authentication and connection-level authorization.
     """
     connection_test = session.scalar(select(ConnectionTestRequest).filter_by(token=connection_test_token))
 

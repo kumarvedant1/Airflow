@@ -829,8 +829,9 @@ export class ConnectionService {
      * Get Connection Test
      * Poll for the status of an async connection test.
      *
-     * Knowledge of the token serves as authorization — only the client
-     * that initiated the test knows the crypto-random token.
+     * The ``connection_test_token`` is a crypto-random identifier used to
+     * look up the specific test result. Access to this endpoint is still
+     * governed by standard authentication and connection-level authorization.
      * @param data The data for the request.
      * @param data.connectionTestToken
      * @returns ConnectionTestStatusResponse Successful Response
