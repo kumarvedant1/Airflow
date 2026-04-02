@@ -182,6 +182,59 @@ class TestAssetModelOperation:
         asset_model = session.scalars(select(AssetModel)).one()
         assert len(asset_model.triggers) == expected_num_triggers
 
+    @pytest.mark.usefixtures("testing_dag_bundle")
+    def test_add_asset_trigger_references_is_idempotent(self, dag_maker, session):
+        """Calling add_asset_trigger_references twice should be a no-op on the second call.
+
+        This guards against the bug where a serialization mismatch between DAG-defined
+        and DB-stored trigger kwargs caused BaseEventTrigger.hash() to produce different
+        hashes, resulting in triggers being deleted and recreated every parsing loop.
+        """
+        asset = Asset(
+            "test_idempotent_asset",
+            watchers=[AssetWatcher(name="test", trigger=FileDeleteTrigger(mock.Mock()))],
+        )
+
+        with dag_maker(dag_id="test_idempotent_dag", schedule=[asset]) as dag:
+            EmptyOperator(task_id="mytask")
+
+        dags = {dag.dag_id: LazyDeserializedDAG.from_dag(dag)}
+        orm_dags = DagModelOperation(dags, "testing", None).add_dags(session=session)
+        dag_model = orm_dags[dag.dag_id]
+        dag_model.is_stale = False
+        dag_model.is_paused = False
+
+        asset_op = AssetModelOperation.collect(dags)
+        orm_assets = asset_op.sync_assets(session=session)
+        session.flush()
+
+        asset_op.add_dag_asset_references(orm_dags, orm_assets, session=session)
+        asset_op.activate_assets_if_possible(orm_assets.values(), session=session)
+
+        # First call — creates the trigger.
+        asset_op.add_asset_trigger_references(orm_assets, session=session)
+        session.flush()
+
+        asset_model = session.scalars(select(AssetModel)).one()
+        assert len(asset_model.triggers) == 1
+        trigger_ids_first = {t.id for t in asset_model.triggers}
+
+        # Expire cached state so the second call reads fresh DB data,
+        # simulating a new parsing loop.
+        session.expire_all()
+
+        # Second call — should be a no-op (same trigger IDs, no churn).
+        asset_op.add_asset_trigger_references(orm_assets, session=session)
+        session.flush()
+
+        asset_model = session.scalars(select(AssetModel)).one()
+        assert len(asset_model.triggers) == 1
+        trigger_ids_second = {t.id for t in asset_model.triggers}
+
+        assert trigger_ids_first == trigger_ids_second, (
+            "Trigger IDs changed between parsing loops — add_asset_trigger_references is not idempotent"
+        )
+
     @pytest.mark.parametrize(
         ("schedule", "model", "columns", "expected"),
         [

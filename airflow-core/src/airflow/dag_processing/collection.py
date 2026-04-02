@@ -54,6 +54,7 @@ from airflow.models.dagrun import DagRun
 from airflow.models.dagwarning import DagWarningType
 from airflow.models.errors import ParseImportError
 from airflow.models.trigger import Trigger
+from airflow.serialization.decoders import smart_decode_trigger_kwargs
 from airflow.serialization.definitions.assets import (
     SerializedAsset,
     SerializedAssetAlias,
@@ -726,6 +727,23 @@ def _find_all_asset_aliases(dags: Iterable[LazyDeserializedDAG]) -> Iterator[Ser
             yield alias
 
 
+def _get_raw_trigger_kwargs(trigger) -> tuple[str, dict]:
+    """
+    Extract classpath and raw Python kwargs from a trigger.
+
+    Unlike ``encode_trigger``, this does NOT wrap values with
+    ``BaseSerialization``.  For dict triggers (from deserialized DAGs),
+    any BaseSerialization-wrapped values are unwrapped back to Python
+    objects, ensuring hash consistency with kwargs read back from the DB
+    via ``Trigger._decrypt_kwargs``.
+    """
+    if isinstance(trigger, dict):
+        classpath = trigger["classpath"]
+        raw_kwargs = trigger["kwargs"]
+        return classpath, {k: smart_decode_trigger_kwargs(v) for k, v in raw_kwargs.items()}
+    return trigger.serialize()
+
+
 def _find_active_assets(name_uri_assets: Iterable[tuple[str, str]], session: Session) -> set[tuple[str, str]]:
     return {
         (str(row[0]), str(row[1]))
@@ -1001,8 +1019,6 @@ class AssetModelOperation(NamedTuple):
     def add_asset_trigger_references(
         self, assets: dict[tuple[str, str], AssetModel], *, session: Session
     ) -> None:
-        from airflow.serialization.encoders import encode_trigger
-
         # Update references from assets being used
         refs_to_add: dict[tuple[str, str], set[int]] = {}
         refs_to_remove: dict[tuple[str, str], set[int]] = {}
@@ -1013,14 +1029,15 @@ class AssetModelOperation(NamedTuple):
 
         for name_uri, asset in self.assets.items():
             # If the asset belong to a DAG not active or paused, consider there is no watcher associated to it
-            asset_watcher_triggers = (
-                [
-                    {**encode_trigger(watcher.trigger), "watcher_name": watcher.name}
+            if name_uri in active_assets:
+                asset_watcher_triggers: list[dict[str, Any]] = [
+                    {"classpath": cp, "kwargs": kw, "watcher_name": watcher.name}
                     for watcher in asset.watchers
+                    for cp, kw in [_get_raw_trigger_kwargs(watcher.trigger)]
                 ]
-                if name_uri in active_assets
-                else []
-            )
+            else:
+                asset_watcher_triggers = []
+
             trigger_hash_to_trigger_dict: dict[int, dict] = {
                 BaseEventTrigger.hash(trigger["classpath"], trigger["kwargs"]): trigger
                 for trigger in asset_watcher_triggers
@@ -1029,6 +1046,7 @@ class AssetModelOperation(NamedTuple):
             trigger_hash_from_asset: set[int] = set(trigger_hash_to_trigger_dict.keys())
 
             asset_model = assets[name_uri]
+
             trigger_hash_from_asset_model: set[int] = {
                 BaseEventTrigger.hash(trigger.classpath, trigger.kwargs) for trigger in asset_model.triggers
             }
