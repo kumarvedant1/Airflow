@@ -26,17 +26,19 @@ from airflow.providers.common.compat.sdk import AirflowException, BaseHook, Task
 from airflow.providers.microsoft.azure.hooks.powerbi import (
     PowerBIDatasetRefreshFields,
     PowerBIDatasetRefreshStatus,
+    PowerBIHook,
 )
 from airflow.providers.microsoft.azure.operators.powerbi import PowerBIDatasetRefreshOperator
 from airflow.providers.microsoft.azure.triggers.powerbi import PowerBITrigger
 
 from tests_common.test_utils.mock_context import mock_context
+from tests_common.test_utils.operators.run_deferrable import execute_operator
 from unit.microsoft.azure.test_utils import get_airflow_connection
 
 try:
     from airflow.sdk import timezone
 except ImportError:
-    from airflow.utils import timezone  # type: ignore[no-redef]
+    from airflow.utils import timezone  # type: ignore[attr-defined, no-redef]
 
 
 DEFAULT_CONNECTION_CLIENT_SECRET = "powerbi_conn_id"
@@ -196,6 +198,52 @@ class TestPowerBIDatasetRefreshOperator:
             )
 
         assert context["ti"].xcom_push.call_count == 0
+
+    @mock.patch.object(PowerBIHook, "get_refresh_details_by_refresh_id")
+    @mock.patch.object(PowerBIHook, "trigger_dataset_refresh")
+    def test_execute_operator_wait_for_completion_full_lifecycle(
+        self, mock_trigger_dataset_refresh, mock_get_refresh_details_by_refresh_id
+    ):
+        """Assert the full deferrable lifecycle completes successfully."""
+        mock_trigger_dataset_refresh.return_value = NEW_REFRESH_REQUEST_ID
+        mock_get_refresh_details_by_refresh_id.side_effect = [
+            {
+                PowerBIDatasetRefreshFields.STATUS.value: PowerBIDatasetRefreshStatus.IN_PROGRESS,
+                PowerBIDatasetRefreshFields.ERROR.value: None,
+            },
+            {
+                PowerBIDatasetRefreshFields.STATUS.value: PowerBIDatasetRefreshStatus.COMPLETED,
+                PowerBIDatasetRefreshFields.ERROR.value: None,
+            },
+        ]
+
+        operator = PowerBIDatasetRefreshOperator(
+            **CONFIG,
+            wait_for_completion=True,
+        )
+
+        result, events = execute_operator(operator)
+
+        assert result is None
+        mock_trigger_dataset_refresh.assert_called_once_with(
+            dataset_id=DATASET_ID,
+            group_id=GROUP_ID,
+            request_body=REQUEST_BODY,
+        )
+        assert mock_get_refresh_details_by_refresh_id.call_count == 2
+        assert len(events) == 2
+        assert events[0].payload == {
+            "status": "success",
+            "dataset_refresh_status": None,
+            "message": f"The dataset refresh {NEW_REFRESH_REQUEST_ID} has been triggered.",
+            "dataset_refresh_id": NEW_REFRESH_REQUEST_ID,
+        }
+        assert events[1].payload == {
+            "status": "success",
+            "dataset_refresh_status": PowerBIDatasetRefreshStatus.COMPLETED,
+            "message": f"The dataset refresh {NEW_REFRESH_REQUEST_ID} has {PowerBIDatasetRefreshStatus.COMPLETED}.",
+            "dataset_refresh_id": NEW_REFRESH_REQUEST_ID,
+        }
 
     def test_powerbi_operator_async_execute_complete_success(self):
         """Assert that execute_complete processes success event correctly"""
