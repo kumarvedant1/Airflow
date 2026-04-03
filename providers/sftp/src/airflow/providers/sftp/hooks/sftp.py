@@ -811,6 +811,12 @@ class SFTPHookAsync(BaseHook):
         :param encoding: Encoding to use for reading the remote file (default: "utf-8").
         :param chunk_size: Size of chunks to read at a time (default: 64KB).
         """
+
+        def _to_bytes(chunk: str | bytes) -> bytes:
+            if isinstance(chunk, bytes):
+                return chunk
+            return chunk.encode(encoding)
+
         async with await self._get_conn() as ssh_conn:
             async with ssh_conn.start_sftp_client() as sftp:
                 async with sftp.open(remote_full_path, encoding=encoding) as remote_file:
@@ -819,7 +825,7 @@ class SFTPHookAsync(BaseHook):
                             chunk = await remote_file.read(chunk_size)
                             if not chunk:
                                 break
-                            local_full_path.write(chunk.encode(encoding))
+                            local_full_path.write(_to_bytes(chunk))
                         local_full_path.seek(0)
                     else:
                         async with aiofiles.open(local_full_path, "wb") as f:
@@ -827,7 +833,7 @@ class SFTPHookAsync(BaseHook):
                                 chunk = await remote_file.read(chunk_size)
                                 if not chunk:
                                     break
-                                await f.write(chunk)
+                                await f.write(_to_bytes(chunk))
 
     async def store_file(self, remote_full_path: str, local_full_path: str | bytes | BytesIO) -> None:
         """
@@ -877,24 +883,29 @@ class SFTPHookAsync(BaseHook):
         :param path: Full path to the remote directory to list.
         :return: List of file paths found under the directory, or None if the directory does not exist.
         """
-        async with await self._get_conn() as ssh_conn:
-            async with ssh_conn.start_sftp_client() as sftp:
+        try:
+            async with await self._get_conn() as ssh_conn:
+                async with ssh_conn.start_sftp_client() as sftp:
 
-                async def walk(dir_path: str):
-                    results = []
-                    files = await sftp.readdir(dir_path)
+                    async def walk(dir_path: str) -> list[str]:
+                        results: list[str] = []
+                        files = await sftp.readdir(dir_path)
 
-                    for file in files:
-                        if file.filename not in {".", ".."}:
-                            file_path = posixpath.join(dir_path, file.filename)
-                            if stat.S_ISDIR(file.attrs.permissions):
-                                results.extend(await walk(file_path))
-                            else:
-                                results.append(file_path)
+                        for file in files:
+                            filename = os.fsdecode(file.filename)
+                            if filename not in {".", ".."}:
+                                file_path = posixpath.join(dir_path, filename)
+                                permissions = file.attrs.permissions
+                                if permissions is not None and stat.S_ISDIR(permissions):
+                                    results.extend(await walk(file_path))
+                                else:
+                                    results.append(file_path)
 
-                    return results
+                        return results
 
-                return await walk(path)
+                    return await walk(path)
+        except asyncssh.SFTPNoSuchFile:
+            return None
 
     async def read_directory(self, path: str = "") -> Sequence[asyncssh.sftp.SFTPName] | None:  # type: ignore[return]
         """Return a list of files along with their attributes on the SFTP server at the provided path."""
