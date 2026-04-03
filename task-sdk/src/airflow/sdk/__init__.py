@@ -37,6 +37,8 @@ __all__ = [
     "BaseSensorOperator",
     "BaseXCom",
     "BranchMixIn",
+    "CallbackMeta",
+    "CallbackSource",
     "ChainMapper",
     "Connection",
     "Context",
