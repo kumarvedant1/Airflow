@@ -984,7 +984,8 @@ class TestSFTPHookAsync:
         ]
 
         files = await hook.list_directory(path="/path/exists/")
-        assert sorted(files) == sorted(["/path/exists/file"])
+        assert files is not None
+        assert sorted(files) == sorted(["file"])
         sftp_client_mock.__aexit__.assert_awaited()
 
     @pytest.mark.asyncio
@@ -1119,6 +1120,43 @@ class TestSFTPHookAsync:
 
         sftp_client.readdir.side_effect = readdir_side_effect
 
-        files = await hook.list_directory("/dir")
+        files = await hook.list_directory("/dir", recursive=True)
+        assert files is not None
         assert sorted(files) == sorted(["/dir/file1", "/dir/subdir/file2"])
         sftp_client_mock.__aexit__.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_list_directory_non_recursive(self, sftp_hook_mocked):
+        """Assert that default list_directory returns one-level entry names only."""
+        hook, sftp_client_mock = sftp_hook_mocked
+
+        sftp_client = sftp_client_mock.__aenter__.return_value
+
+        async def readdir_side_effect(path):
+            if path == "/dir":
+
+                class File:
+                    filename = "file1"
+                    attrs = type("attrs", (), {"permissions": stat.S_IFREG})
+
+                class Subdir:
+                    filename = "subdir"
+                    attrs = type("attrs", (), {"permissions": stat.S_IFDIR})
+
+                return [File(), Subdir()]
+            if path == "/dir/subdir":
+
+                class File:
+                    filename = "file2"
+                    attrs = type("attrs", (), {"permissions": stat.S_IFREG})
+
+                return [File()]
+            return []
+
+        sftp_client.readdir.side_effect = readdir_side_effect
+
+        files = await hook.list_directory("/dir")
+        assert files is not None
+        assert sorted(files) == sorted(["file1", "subdir"])
+        sftp_client_mock.__aexit__.assert_awaited()
+

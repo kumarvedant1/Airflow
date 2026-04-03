@@ -874,17 +874,28 @@ class SFTPHookAsync(BaseHook):
             async with ssh_conn.start_sftp_client() as sftp:
                 await sftp.makedirs(path)
 
-    async def list_directory(self, path: str) -> list[str] | None:
+    async def list_directory(self, path: str, recursive: bool = False) -> list[str] | None:
         """
         List files in a directory on the remote system asynchronously.
 
-        Recursively lists all files under the given directory path.
+        Lists entries under the given directory path.
+
+        If ``recursive=True``, descendants are returned as full paths.
+        If ``recursive=False`` (default), only one-level filenames are returned.
 
         :param path: Full path to the remote directory to list.
+        :param recursive: Whether to recursively list descendants.
         :return: List of file paths found under the directory, or None if the directory does not exist.
         """
         async with await self._get_conn() as ssh_conn:
             async with ssh_conn.start_sftp_client() as sftp:
+
+                if not recursive:
+                    try:
+                        files = await sftp.readdir(path)
+                    except asyncssh.SFTPNoSuchFile:
+                        return None
+                    return [os.fsdecode(file.filename) for file in files if os.fsdecode(file.filename) not in {".", ".."}]
 
                 async def walk(dir_path: str) -> list[str]:
                     results: list[str] = []
