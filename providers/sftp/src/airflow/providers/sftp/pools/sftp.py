@@ -35,7 +35,7 @@ class SFTPClientPool(LoggingMixin):
     _instances: dict[str, SFTPClientPool] = {}
     _lock = Lock()
 
-    def __new__(cls, sftp_conn_id: str, pool_size: int = None):
+    def __new__(cls, sftp_conn_id: str, pool_size: int | None = None):
         with cls._lock:
             if sftp_conn_id not in cls._instances:
                 instance = super().__new__(cls)
@@ -43,11 +43,11 @@ class SFTPClientPool(LoggingMixin):
                 cls._instances[sftp_conn_id] = instance
             return cls._instances[sftp_conn_id]
 
-    def __init__(self, sftp_conn_id: str, pool_size: int = None):
+    def __init__(self, sftp_conn_id: str, pool_size: int | None = None):
         # Prevent parent __init__ argument errors
         pass
 
-    def _pre_init(self, sftp_conn_id: str, pool_size: int):
+    def _pre_init(self, sftp_conn_id: str, pool_size: int | None):
         """Initialize the Singleton structure synchronously."""
         LoggingMixin.__init__(self)
         self.sftp_conn_id = sftp_conn_id
