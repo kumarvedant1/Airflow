@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import pytest
+
 from airflow.providers.sftp.pools.sftp import SFTPClientPool
 
 
