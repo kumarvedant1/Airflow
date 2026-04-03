@@ -796,18 +796,18 @@ class SFTPHookAsync(BaseHook):
     async def retrieve_file(
         self,
         remote_full_path: str,
-        local_full_path: str | BytesIO,
+        local_full_path: str | os.PathLike[str] | IO[bytes],
         encoding: str = "utf-8",
         chunk_size: int = CHUNK_SIZE,
     ) -> None:
         """
         Transfer the remote file to a local location asynchronously.
 
-        If local_full_path is a string path, the file will be put at that location.
-        If it is a BytesIO or file-like object, the file will be streamed into it.
+        If local_full_path is a string or PathLike path, the file will be put at that location.
+        If it is a BytesIO or other binary file-like object, the file will be streamed into it.
 
         :param remote_full_path: Full path to the remote file.
-        :param local_full_path: Full path to the local file or a file-like buffer.
+        :param local_full_path: Full path to the local file or a binary file-like buffer.
         :param encoding: Encoding used only as a fallback if backend returns text chunks (default: "utf-8").
         :param chunk_size: Size of chunks to read at a time (default: 64KB).
         """
@@ -820,20 +820,21 @@ class SFTPHookAsync(BaseHook):
         async with await self._get_conn() as ssh_conn:
             async with ssh_conn.start_sftp_client() as sftp:
                 async with sftp.open(remote_full_path, "rb") as remote_file:
-                    if isinstance(local_full_path, BytesIO):
-                        while True:
-                            chunk = await remote_file.read(chunk_size)
-                            if not chunk:
-                                break
-                            local_full_path.write(_to_bytes(chunk))
-                        local_full_path.seek(0)
-                    else:
+                    if isinstance(local_full_path, (str, os.PathLike)):
                         async with aiofiles.open(local_full_path, "wb") as f:
                             while True:
                                 chunk = await remote_file.read(chunk_size)
                                 if not chunk:
                                     break
                                 await f.write(_to_bytes(chunk))
+                    else:
+                        while True:
+                            chunk = await remote_file.read(chunk_size)
+                            if not chunk:
+                                break
+                            local_full_path.write(_to_bytes(chunk))
+                        if hasattr(local_full_path, "seek"):
+                            local_full_path.seek(0)
 
     async def store_file(self, remote_full_path: str, local_full_path: str | bytes | BytesIO) -> None:
         """
