@@ -808,7 +808,7 @@ class SFTPHookAsync(BaseHook):
 
         :param remote_full_path: Full path to the remote file.
         :param local_full_path: Full path to the local file or a file-like buffer.
-        :param encoding: Encoding to use for reading the remote file (default: "utf-8").
+        :param encoding: Encoding used only as a fallback if backend returns text chunks (default: "utf-8").
         :param chunk_size: Size of chunks to read at a time (default: 64KB).
         """
 
@@ -819,7 +819,7 @@ class SFTPHookAsync(BaseHook):
 
         async with await self._get_conn() as ssh_conn:
             async with ssh_conn.start_sftp_client() as sftp:
-                async with sftp.open(remote_full_path, encoding=encoding) as remote_file:
+                async with sftp.open(remote_full_path, "rb") as remote_file:
                     if isinstance(local_full_path, BytesIO):
                         while True:
                             chunk = await remote_file.read(chunk_size)

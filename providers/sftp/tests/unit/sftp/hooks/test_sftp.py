@@ -1065,7 +1065,7 @@ class TestSFTPHookAsync:
         mock_aiofiles_open.return_value.__aenter__.return_value = mock_file
 
         await hook.retrieve_file("/remote/file", "/local/file")
-        sftp_client.open.assert_called_once_with("/remote/file", encoding="utf-8")
+        sftp_client.open.assert_called_once_with("/remote/file", "rb")
         mock_file.write.assert_awaited()
         sftp_client_mock.__aexit__.assert_awaited()
 
@@ -1078,13 +1078,13 @@ class TestSFTPHookAsync:
 
         sftp_client = sftp_client_mock.__aenter__.return_value
         mock_remote_file = AsyncMock()
-        mock_remote_file.read = AsyncMock(side_effect=["abc", ""])
+        mock_remote_file.read = AsyncMock(side_effect=[b"abc", b""])
         sftp_client.open.return_value.__aenter__.return_value = mock_remote_file
         buf = BytesIO()
 
         await hook.retrieve_file("/remote/file", buf)
         assert buf.getvalue() == b"abc"
-        sftp_client.open.assert_called_once_with("/remote/file", encoding="utf-8")
+        sftp_client.open.assert_called_once_with("/remote/file", "rb")
         sftp_client_mock.__aexit__.assert_awaited()
 
     @pytest.mark.asyncio
