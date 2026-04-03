@@ -16,6 +16,8 @@
 # under the License.
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from airflow.providers.sftp.pools.sftp import SFTPClientPool
@@ -45,8 +47,15 @@ class TestSFTPClientPool:
 
     @pytest.mark.asyncio
     async def test_get_sftp_client_context_manager(self, sftp_hook_mocked):
-        async with SFTPClientPool("test_conn", pool_size=2) as pool:
-            assert pool is not None
+        async with SFTPClientPool("test_conn", pool_size=1) as pool:
+            async with pool.get_sftp_client() as sftp:
+                assert sftp is not None
+
+            # If the context manager releases correctly, the single slot can be acquired again.
+            ssh2, sftp2 = await asyncio.wait_for(pool.acquire(), timeout=1)
+            assert ssh2 is not None
+            assert sftp2 is not None
+            await pool.release((ssh2, sftp2))
 
     @pytest.mark.asyncio
     async def test_acquire_failure_releases_semaphore(self, sftp_hook_mocked, monkeypatch):
