@@ -22,6 +22,15 @@ from airflow.providers.sftp.pools.sftp import SFTPClientPool
 
 
 class TestSFTPClientPool:
+    @pytest.fixture(autouse=True)
+    def cleanup_singleton(self):
+        """Clear SFTPClientPool._instances before and after each test to ensure test isolation."""
+        # Clear before test
+        SFTPClientPool._instances.clear()
+        yield
+        # Clear after test
+        SFTPClientPool._instances.clear()
+
     @pytest.mark.asyncio
     async def test_acquire_and_release(self, sftp_hook_mocked):
         async with SFTPClientPool("test_conn", pool_size=2) as pool:
