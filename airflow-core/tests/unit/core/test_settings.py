@@ -239,7 +239,7 @@ class TestMetadataEngineHooks:
 
         with (
             patch("os.environ", {"_AIRFLOW_SKIP_DB_TESTS": "false"}),
-            patch("airflow.settings.SQL_ALCHEMY_CONN", "sqlite://"),
+            patch("airflow.settings._AirflowSettings.sql_alchemy_conn", "sqlite://"),
             patch("airflow.settings.Session"),
             patch("airflow.settings.engine"),
             patch("airflow.settings.setup_event_handlers"),
@@ -264,7 +264,7 @@ class TestMetadataEngineHooks:
 
         mock_create_async_engine.return_value = MagicMock()
 
-        with patch("airflow.settings.SQL_ALCHEMY_CONN_ASYNC", "sqlite+aiosqlite://"):
+        with patch("airflow.settings._AirflowSettings.sql_alchemy_conn_async", "sqlite+aiosqlite://"):
             settings._configure_async_session()
 
         mock_create_async_engine.assert_called_once()
@@ -274,10 +274,10 @@ class TestMetadataEngineHooks:
 
     @patch("airflow.settings.create_async_metadata_engine")
     def test_configure_async_session_skips_when_no_async_conn(self, mock_create_async_engine):
-        """_configure_async_session() must not call the hook when SQL_ALCHEMY_CONN_ASYNC is empty."""
+        """_configure_async_session() must not call the hook when ``sql_alchemy_conn_async`` is empty."""
         from airflow import settings
 
-        with patch("airflow.settings.SQL_ALCHEMY_CONN_ASYNC", ""):
+        with patch("airflow.settings._AirflowSettings.sql_alchemy_conn_async", ""):
             settings._configure_async_session()
 
         assert mock_create_async_engine.mock_calls == []
