@@ -41,6 +41,18 @@ class SFTPClientPool(LoggingMixin):
                 instance = super().__new__(cls)
                 instance._pre_init(sftp_conn_id, pool_size)
                 cls._instances[sftp_conn_id] = instance
+            else:
+                # Validate that subsequent constructions for the same sftp_conn_id
+                # do not request a different pool_size, which would otherwise be
+                # silently ignored due to the singleton behavior.
+                instance = cls._instances[sftp_conn_id]
+                requested_pool_size = pool_size or conf.getint("core", "parallelism")
+                if instance.pool_size != requested_pool_size:
+                    raise ValueError(
+                        f"SFTPClientPool for sftp_conn_id '{sftp_conn_id}' has already been "
+                        f"initialised with pool_size={instance.pool_size}, but a different "
+                        f"pool_size={requested_pool_size} was requested."
+                    )
             return cls._instances[sftp_conn_id]
 
     def __init__(self, sftp_conn_id: str, pool_size: int | None = None):

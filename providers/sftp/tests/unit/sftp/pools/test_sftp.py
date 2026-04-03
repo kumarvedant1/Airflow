@@ -69,3 +69,38 @@ class TestSFTPClientPool:
             await pool.release((ssh, sftp))
 
         assert close_spy.call_count == 1
+
+    def test_pool_size_consistency_validation(self, sftp_hook_mocked):
+        """Test that creating a pool with different pool_size for same conn_id raises ValueError."""
+        # Create first instance with pool_size=2
+        pool1 = SFTPClientPool("consistent_conn", pool_size=2)
+        assert pool1.pool_size == 2
+
+        # Attempt to create another instance with same conn_id but different pool_size should fail
+        with pytest.raises(ValueError, match="has already been initialised with pool_size=2"):
+            SFTPClientPool("consistent_conn", pool_size=5)
+
+    def test_pool_size_consistency_with_default(self, sftp_hook_mocked, monkeypatch):
+        """Test that creating a pool with default pool_size and then explicit different pool_size raises ValueError."""
+        # Mock the config to return a specific default pool_size
+        monkeypatch.setattr("airflow.providers.sftp.pools.sftp.conf.getint", lambda *args: 3)
+
+        # Create first instance without explicit pool_size (uses default)
+        pool1 = SFTPClientPool("default_conn")
+        assert pool1.pool_size == 3
+
+        # Attempt to create another instance with explicit different pool_size should fail
+        with pytest.raises(ValueError, match="has already been initialised with pool_size=3"):
+            SFTPClientPool("default_conn", pool_size=10)
+
+    def test_pool_size_consistency_same_pool_size(self, sftp_hook_mocked):
+        """Test that creating a pool with same pool_size for same conn_id succeeds."""
+        # Create first instance with pool_size=4
+        pool1 = SFTPClientPool("same_pool_conn", pool_size=4)
+        assert pool1.pool_size == 4
+
+        # Create another instance with same conn_id and same pool_size should succeed
+        pool2 = SFTPClientPool("same_pool_conn", pool_size=4)
+        assert pool2 is pool1  # Should be the same instance (singleton)
+        assert pool2.pool_size == 4
+
