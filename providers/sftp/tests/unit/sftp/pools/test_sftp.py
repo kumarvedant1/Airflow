@@ -69,4 +69,3 @@ class TestSFTPClientPool:
             await pool.release((ssh, sftp))
 
         assert close_spy.call_count == 1
-
