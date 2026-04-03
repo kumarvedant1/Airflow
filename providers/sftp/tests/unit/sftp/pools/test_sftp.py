@@ -21,7 +21,6 @@ import pytest
 from airflow.providers.sftp.pools.sftp import SFTPClientPool
 
 
-@pytest.mark.asyncio
 class TestSFTPClientPool:
     @pytest.mark.asyncio
     async def test_acquire_and_release(self, sftp_hook_mocked):
