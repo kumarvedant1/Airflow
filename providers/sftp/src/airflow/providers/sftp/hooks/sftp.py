@@ -906,6 +906,7 @@ class SFTPHookAsync(BaseHook):
                     return await walk(path)
         except asyncssh.SFTPNoSuchFile:
             return None
+        return None
 
     async def read_directory(self, path: str = "") -> Sequence[asyncssh.sftp.SFTPName] | None:  # type: ignore[return]
         """Return a list of files along with their attributes on the SFTP server at the provided path."""
