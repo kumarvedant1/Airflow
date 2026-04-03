@@ -48,7 +48,7 @@ class SFTPClientPool(LoggingMixin):
         pass
 
     def _pre_init(self, sftp_conn_id: str, pool_size: int):
-        """Synchronous initialization for the Singleton structure."""
+        """Initialize the Singleton structure synchronously."""
         LoggingMixin.__init__(self)
         self.sftp_conn_id = sftp_conn_id
         self.pool_size = pool_size or conf.getint("core", "parallelism")
