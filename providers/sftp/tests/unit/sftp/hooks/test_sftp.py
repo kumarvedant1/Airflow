@@ -951,7 +951,7 @@ class TestSFTPHookAsync:
     @pytest.mark.asyncio
     async def test_list_directory_path_does_not_exist(self, sftp_hook_mocked):
         """
-        Assert that AirflowException is raised when path does not exist on SFTP server
+        Assert that None is returned when path does not exist on SFTP server
         """
         hook, sftp_cm_mock = sftp_hook_mocked
 

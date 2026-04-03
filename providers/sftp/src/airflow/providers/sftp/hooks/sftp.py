@@ -883,30 +883,29 @@ class SFTPHookAsync(BaseHook):
         :param path: Full path to the remote directory to list.
         :return: List of file paths found under the directory, or None if the directory does not exist.
         """
-        try:
-            async with await self._get_conn() as ssh_conn:
-                async with ssh_conn.start_sftp_client() as sftp:
+        async with await self._get_conn() as ssh_conn:
+            async with ssh_conn.start_sftp_client() as sftp:
 
-                    async def walk(dir_path: str) -> list[str]:
-                        results: list[str] = []
-                        files = await sftp.readdir(dir_path)
+                async def walk(dir_path: str) -> list[str]:
+                    results: list[str] = []
+                    files = await sftp.readdir(dir_path)
 
-                        for file in files:
-                            filename = os.fsdecode(file.filename)
-                            if filename not in {".", ".."}:
-                                file_path = posixpath.join(dir_path, filename)
-                                permissions = file.attrs.permissions
-                                if permissions is not None and stat.S_ISDIR(permissions):
-                                    results.extend(await walk(file_path))
-                                else:
-                                    results.append(file_path)
+                    for file in files:
+                        filename = os.fsdecode(file.filename)
+                        if filename not in {".", ".."}:
+                            file_path = posixpath.join(dir_path, filename)
+                            permissions = file.attrs.permissions
+                            if permissions is not None and stat.S_ISDIR(permissions):
+                                results.extend(await walk(file_path))
+                            else:
+                                results.append(file_path)
 
-                        return results
+                    return results
 
+                try:
                     return await walk(path)
-        except asyncssh.SFTPNoSuchFile:
-            return None
-        return None
+                except asyncssh.SFTPNoSuchFile:
+                    return None
 
     async def read_directory(self, path: str = "") -> Sequence[asyncssh.sftp.SFTPName] | None:  # type: ignore[return]
         """Return a list of files along with their attributes on the SFTP server at the provided path."""
