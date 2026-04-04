@@ -2125,7 +2125,6 @@ class TestWorkerHPAAutoScaler:
                 "workers": {
                     **workers_keda_values,
                     "hpa": {"enabled": True},
-                    "labels": {"test_label": "test_label_value"},
                 },
             },
             show_only=[
@@ -2133,8 +2132,7 @@ class TestWorkerHPAAutoScaler:
                 "templates/workers/worker-hpa.yaml",
             ],
         )
-        assert "test_label" in jmespath.search("metadata.labels", docs[0])
-        assert jmespath.search("metadata.labels", docs[0])["test_label"] == "test_label_value"
+
         assert len(docs) == 1
 
     def test_should_add_component_specific_labels(self):
