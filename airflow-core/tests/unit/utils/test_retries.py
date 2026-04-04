@@ -23,6 +23,7 @@ from unittest import mock
 
 import pytest
 from sqlalchemy.exc import InternalError, OperationalError
+from sqlalchemy.orm.exc import StaleDataError
 
 from airflow.utils.retries import retry_db_transaction
 
@@ -53,7 +54,7 @@ class TestRetries:
     def test_retry_db_transaction_with_default_retries(self, caplog, excection_type: type[DBAPIError]):
         """Test that by default 3 retries will be carried out"""
         mock_obj = mock.MagicMock()
-        mock_session = mock.MagicMock()
+        mock_session = mock.MagicMock(spec=["execute", "rollback"])
         mock_rollback = mock.MagicMock()
         mock_session.rollback = mock_rollback
         db_error = excection_type(statement=mock.ANY, params=mock.ANY, orig=mock.ANY)
@@ -77,6 +78,27 @@ class TestRetries:
         assert mock_session.execute.call_count == 3
         assert mock_rollback.call_count == 3
         mock_rollback.assert_has_calls([mock.call(), mock.call(), mock.call()])
+
+    @pytest.mark.db_test
+    def test_retry_db_transaction_with_stale_data_error(self):
+        """Test that StaleDataError is retried just like DBAPIError"""
+        mock_obj = mock.MagicMock()
+        mock_session = mock.MagicMock()
+        mock_rollback = mock.MagicMock()
+        mock_session.rollback = mock_rollback
+        stale_error = StaleDataError()
+
+        @retry_db_transaction
+        def test_function(session):
+            session.execute("select 1")
+            mock_obj(2)
+            raise stale_error
+
+        with pytest.raises(StaleDataError):
+            test_function(session=mock_session)
+
+        assert mock_session.execute.call_count == 3
+        assert mock_rollback.call_count == 3
 
     def test_retry_db_transaction_fails_when_used_in_function_without_retry(self):
         """Test that an error is raised when the decorator is used on a function without session arg"""
