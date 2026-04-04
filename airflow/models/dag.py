@@ -4102,7 +4102,7 @@ class DagModel(Base):
         ser_dag_ids = {s.dag_id for s in ser_dags}
         missing_from_serialized = set(by_dag.keys()) - ser_dag_ids
         if missing_from_serialized:
-            log.debug(
+            log.info(
                 "Dags have queued dataset events (DDRQs), but are not found in the serialized_dag table."
                 " — skipping Dag run creation: %s",
                 sorted(missing_from_serialized),
