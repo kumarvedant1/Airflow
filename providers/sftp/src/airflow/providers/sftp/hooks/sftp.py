@@ -890,7 +890,6 @@ class SFTPHookAsync(BaseHook):
         """
         async with await self._get_conn() as ssh_conn:
             async with ssh_conn.start_sftp_client() as sftp:
-
                 if not recursive:
                     try:
                         files = await sftp.readdir(path)
