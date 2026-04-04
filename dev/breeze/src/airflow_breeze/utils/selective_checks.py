@@ -45,6 +45,7 @@ from airflow_breeze.global_constants import (
     DISABLE_TESTABLE_INTEGRATIONS_FROM_CI,
     HELM_VERSION,
     KIND_VERSION,
+    NUMBER_OF_CORE_SLICES,
     NUMBER_OF_LOW_DEP_SLICES,
     PROVIDERS_COMPATIBILITY_TESTS_MATRIX,
     PUBLIC_AMD_RUNNERS,
@@ -57,6 +58,7 @@ from airflow_breeze.global_constants import (
     SelectiveCoreTestType,
     SelectiveProvidersTestType,
     SelectiveTaskSdkTestType,
+    SelectiveTestType,
     all_helm_test_packages,
     all_selective_core_test_types,
     providers_test_type,
@@ -111,6 +113,7 @@ class FileGroupForCi(Enum):
     HELM_FILES = auto()
     DEPENDENCY_FILES = auto()
     DOC_FILES = auto()
+    TEXT_NON_DOC_FILES = auto()
     UI_FILES = auto()
     SYSTEM_TEST_FILES = auto()
     KUBERNETES_FILES = auto()
@@ -120,6 +123,9 @@ class FileGroupForCi(Enum):
     AIRFLOW_CTL_FILES = auto()
     AIRFLOW_CTL_INTEGRATION_TEST_FILES = auto()
     BREEZE_INTEGRATION_TEST_FILES = auto()
+    REMOTE_LOGGING_E2E_SHARED_FILES = auto()
+    REMOTE_LOGGING_E2E_S3_FILES = auto()
+    REMOTE_LOGGING_E2E_ELASTICSEARCH_FILES = auto()
     ALL_PYPROJECT_TOML_FILES = auto()
     ALL_PYTHON_FILES = auto()
     ALL_SOURCE_FILES = auto()
@@ -145,7 +151,7 @@ class AllProvidersSentinel:
 
 ALL_PROVIDERS_SENTINEL = AllProvidersSentinel()
 
-T = TypeVar("T", FileGroupForCi, SelectiveCoreTestType)
+T = TypeVar("T", FileGroupForCi, SelectiveTestType)
 
 
 class HashableDict(dict[T, list[str]]):
@@ -173,6 +179,24 @@ CI_FILE_GROUP_MATCHES: HashableDict[FileGroupForCi] = HashableDict(
             r"^dev/breeze/tests/.*_integration\.py",
             r"^dev/breeze/pyproject\.toml",
             r"^dev/breeze/uv\.lock",
+        ],
+        FileGroupForCi.REMOTE_LOGGING_E2E_SHARED_FILES: [
+            r"^airflow-core/src/airflow/config_templates/airflow_local_settings\.py$",
+            r"^airflow-core/src/airflow/logging/.*",
+            r"^airflow-core/src/airflow/logging_config\.py$",
+            r"^airflow-core/src/airflow/api_fastapi/core_api/routes/public/log\.py$",
+            r"^airflow-core/src/airflow/api_fastapi/core_api/datamodels/log\.py$",
+            r"^airflow-core/src/airflow/utils/log/.*",
+            r"^airflow-e2e-tests/.*",
+            r"^shared/logging/.*",
+        ],
+        FileGroupForCi.REMOTE_LOGGING_E2E_S3_FILES: [
+            r"^airflow-e2e-tests/tests/airflow_e2e_tests/remote_log_tests/.*",
+            r"^providers/amazon/src/airflow/providers/amazon/aws/log/s3_task_handler\.py$",
+        ],
+        FileGroupForCi.REMOTE_LOGGING_E2E_ELASTICSEARCH_FILES: [
+            r"^airflow-e2e-tests/tests/airflow_e2e_tests/remote_log_elasticsearch_tests/.*",
+            r"^providers/elasticsearch/.*",
         ],
         FileGroupForCi.PYTHON_PRODUCTION_FILES: [
             r"^airflow-core/src/airflow/.*\.py",
@@ -234,6 +258,10 @@ CI_FILE_GROUP_MATCHES: HashableDict[FileGroupForCi] = HashableDict(
             r"^chart/values\.json",
             r"^RELEASE_NOTES\.rst",
         ],
+        FileGroupForCi.TEXT_NON_DOC_FILES: [
+            r"^.*\.txt",
+            r"^.*\.md",
+        ],
         FileGroupForCi.UI_FILES: [
             r"^airflow-core/src/airflow/ui/",
             r"^airflow-core/src/airflow/api_fastapi/auth/managers/simple/ui/",
@@ -281,7 +309,6 @@ CI_FILE_GROUP_MATCHES: HashableDict[FileGroupForCi] = HashableDict(
             r"^helm-tests/tests/.*",
             r"^kubernetes-tests/tests/.*",
             r"^docker-tests/tests/.*",
-            r"^dev/.*",
         ],
         FileGroupForCi.SYSTEM_TEST_FILES: [
             r"^airflow-core/tests/system/",
@@ -351,7 +378,7 @@ PYTHON_OPERATOR_FILES = [
     r"^providers/tests/standard/operators/test_python.py",
 ]
 
-TEST_TYPE_MATCHES: HashableDict[SelectiveCoreTestType] = HashableDict(
+TEST_TYPE_MATCHES: HashableDict[SelectiveTestType] = HashableDict(
     {
         SelectiveCoreTestType.API: [
             r"^airflow-core/src/airflow/api/",
@@ -423,7 +450,7 @@ def _exclude_files_with_regexps(files: tuple[str, ...], matched_files, exclude_r
 
 @clearable_cache
 def _matching_files(
-    files: tuple[str, ...], match_group: FileGroupForCi, match_dict: HashableDict
+    files: tuple[str, ...], match_group: FileGroupForCi | SelectiveTestType, match_dict: HashableDict
 ) -> list[str]:
     matched_files: list[str] = []
     match_regexps = match_dict[match_group]
@@ -566,6 +593,11 @@ class SelectiveChecks:
 
     def _should_run_all_tests_and_versions(self) -> bool:
         if self._github_event in [GithubEvents.PUSH, GithubEvents.SCHEDULE, GithubEvents.WORKFLOW_DISPATCH]:
+            if self.only_text_non_doc_files_changed:
+                console_print(
+                    f"[warning]Only text non doc files changed in {self._github_event}, skip full tests[/]"
+                )
+                return False
             console_print(f"[warning]Running everything because event is {self._github_event}[/]")
             return True
         if not self._commit_ref:
@@ -819,7 +851,9 @@ class SelectiveChecks:
     def kubernetes_combos_list_as_string(self) -> str:
         return " ".join(self.kubernetes_combos)
 
-    def _matching_files(self, match_group: FileGroupForCi, match_dict: HashableDict) -> list[str]:
+    def _matching_files(
+        self, match_group: FileGroupForCi | SelectiveTestType, match_dict: HashableDict
+    ) -> list[str]:
         return _matching_files(self._files, match_group, match_dict)
 
     def _should_be_run(self, source_area: FileGroupForCi) -> bool:
@@ -919,7 +953,38 @@ class SelectiveChecks:
 
     @cached_property
     def run_ui_e2e_tests(self) -> bool:
-        return self._should_be_run(FileGroupForCi.UI_FILES)
+        # E2E tests should not be triggered by derived full_tests_needed (push events,
+        # env file changes, large PRs, etc.) - only by explicit label or actual file changes.
+        if FULL_TESTS_NEEDED_LABEL in self._pr_labels:
+            console_print(
+                f"[warning]{FileGroupForCi.UI_FILES} e2e enabled because "
+                f"'{FULL_TESTS_NEEDED_LABEL}' label is set[/]"
+            )
+            return True
+        matched_files = self._matching_files(FileGroupForCi.UI_FILES, CI_FILE_GROUP_MATCHES)
+        if matched_files:
+            console_print(
+                f"[warning]{FileGroupForCi.UI_FILES} e2e enabled because "
+                f"it matched {len(matched_files)} changed files[/]"
+            )
+            return True
+        console_print(
+            f"[warning]{FileGroupForCi.UI_FILES} e2e disabled because "
+            f"it did not match any changed files and no explicit label[/]"
+        )
+        return False
+
+    @cached_property
+    def run_remote_logging_s3_e2e_tests(self) -> bool:
+        return self._should_be_run(FileGroupForCi.REMOTE_LOGGING_E2E_SHARED_FILES) or self._should_be_run(
+            FileGroupForCi.REMOTE_LOGGING_E2E_S3_FILES
+        )
+
+    @cached_property
+    def run_remote_logging_elasticsearch_e2e_tests(self) -> bool:
+        return self._should_be_run(FileGroupForCi.REMOTE_LOGGING_E2E_SHARED_FILES) or self._should_be_run(
+            FileGroupForCi.REMOTE_LOGGING_E2E_ELASTICSEARCH_FILES
+        )
 
     @cached_property
     def run_amazon_tests(self) -> bool:
@@ -1001,6 +1066,13 @@ class SelectiveChecks:
         return all(Path(file).name == "pyproject.toml" for file in self._files)
 
     @cached_property
+    def only_text_non_doc_files_changed(self) -> bool:
+        text_non_doc_files = set(
+            self._matching_files(FileGroupForCi.TEXT_NON_DOC_FILES, CI_FILE_GROUP_MATCHES)
+        )
+        return len(self._files) > 0 and set(self._files) <= text_non_doc_files
+
+    @cached_property
     def ci_image_build(self) -> bool:
         # in case pyproject.toml changed, CI image should be built - even if no build dependencies
         # changes because some of our tests - those that need CI image might need to be run depending on
@@ -1009,12 +1081,10 @@ class SelectiveChecks:
             self.run_unit_tests
             or self.docs_build
             or self.run_kubernetes_tests
-            or self.run_task_sdk_integration_tests
-            or self.run_airflow_ctl_integration_tests
-            or self.run_helm_tests
             or self.run_ui_tests
             or self.pyproject_toml_changed
             or self.any_provider_yaml_or_pyproject_toml_changed
+            or self.prod_image_build
         )
 
     @cached_property
@@ -1024,12 +1094,12 @@ class SelectiveChecks:
             or self.run_helm_tests
             or self.run_task_sdk_integration_tests
             or self.run_airflow_ctl_integration_tests
+            or self.run_remote_logging_s3_e2e_tests
+            or self.run_remote_logging_elasticsearch_e2e_tests
             or self.run_ui_e2e_tests
         )
 
-    def _select_test_type_if_matching(
-        self, test_types: set[str], test_type: SelectiveCoreTestType
-    ) -> list[str]:
+    def _select_test_type_if_matching(self, test_types: set[str], test_type: SelectiveTestType) -> list[str]:
         matched_files = self._matching_files(test_type, TEST_TYPE_MATCHES)
         count = len(matched_files)
         if count > 0:
@@ -1071,11 +1141,13 @@ class SelectiveChecks:
         test_always_files = self._matching_files(FileGroupForCi.ALWAYS_TESTS_FILES, CI_FILE_GROUP_MATCHES)
         test_ui_files = self._matching_files(FileGroupForCi.UI_FILES, CI_FILE_GROUP_MATCHES)
 
+        text_non_doc_files = self._matching_files(FileGroupForCi.TEXT_NON_DOC_FILES, CI_FILE_GROUP_MATCHES)
         remaining_files = (
             set(all_source_files)
             - set(all_providers_source_files)
             - set(all_providers_distribution_config_files)
             - set(matched_files)
+            - set(text_non_doc_files)
             - set(kubernetes_files)
             - set(system_test_files)
             - set(test_always_files)
@@ -1198,7 +1270,10 @@ class SelectiveChecks:
         if not self.run_unit_tests:
             return None
         current_test_types = sorted(set(self._get_core_test_types_to_run()))
-        return json.dumps(_get_test_list_as_json([current_test_types]))
+        if len(current_test_types) <= NUMBER_OF_CORE_SLICES:
+            return json.dumps(_get_test_list_as_json([current_test_types]))
+        list_of_list_of_types = _split_list(current_test_types, NUMBER_OF_CORE_SLICES)
+        return json.dumps(_get_test_list_as_json(list_of_list_of_types))
 
     @cached_property
     def providers_test_types_list_as_strings_in_json(self) -> str:
@@ -1308,7 +1383,7 @@ class SelectiveChecks:
         try:
             import tomllib
         except ImportError:
-            import tomli as tomllib
+            import tomli as tomllib  # type: ignore[no-redef]
 
         self._new_toml = tomllib.loads(new_result.stdout)
         self._old_toml = tomllib.loads(old_result.stdout)
@@ -1382,6 +1457,7 @@ class SelectiveChecks:
     def skip_prek_hooks(self) -> str:
         prek_hooks_to_skip = set()
         prek_hooks_to_skip.add("identity")
+        prek_hooks_to_skip.add("update-uv-lock")
         if self._default_branch != "main":
             # Skip those tests on all "release" branches
             prek_hooks_to_skip.update(
@@ -1480,7 +1556,7 @@ class SelectiveChecks:
         return " ".join(sorted(p for p in affected_providers if p not in suspended))
 
     def get_job_label(self, event_type: str, branch: str):
-        import requests
+        import requests  # type: ignore[import-untyped]
 
         job_name = "Basic tests"
         workflow_name = "ci-amd-arm.yml"
@@ -1677,6 +1753,7 @@ class SelectiveChecks:
         return (
             self._github_event in [GithubEvents.SCHEDULE, GithubEvents.PUSH, GithubEvents.WORKFLOW_DISPATCH]
             and self._github_repository == APACHE_AIRFLOW_GITHUB_REPOSITORY
+            and not self.only_text_non_doc_files_changed
         ) or CANARY_LABEL in self._pr_labels
 
     @cached_property
@@ -1728,7 +1805,7 @@ class SelectiveChecks:
         try:
             import tomllib
         except ImportError:
-            import tomli as tomllib
+            import tomli as tomllib  # type: ignore[no-redef]
 
         violations = []
         for pyproject_file in pyproject_files:
