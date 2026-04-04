@@ -88,6 +88,36 @@ class TestSFTPClientPool:
 
         assert close_spy.call_count == 1
 
+    @pytest.mark.asyncio
+    async def test_close_warns_when_active_connections_exist(self, sftp_hook_mocked, caplog):
+        class DummySSH:
+            def __init__(self):
+                self.closed = False
+
+            def close(self):
+                self.closed = True
+
+        class DummySFTP:
+            def __init__(self):
+                self.exited = False
+
+            def exit(self):
+                self.exited = True
+
+        pool = SFTPClientPool("warn_conn", pool_size=2)
+        ssh = DummySSH()
+        sftp = DummySFTP()
+        pair = (ssh, sftp)
+        pool._in_use.add(pair)
+
+        with caplog.at_level("WARNING"):
+            await pool.close()
+
+        assert "Pool closed with 1 active connections" in caplog.text
+        assert pair not in pool._in_use
+        assert ssh.closed is True
+        assert sftp.exited is True
+
     def test_pool_size_consistency_validation(self, sftp_hook_mocked):
         """Test that creating a pool with different pool_size for same conn_id raises ValueError."""
         # Create first instance with pool_size=2

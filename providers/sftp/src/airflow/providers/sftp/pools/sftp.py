@@ -176,6 +176,7 @@ class SFTPClientPool(LoggingMixin):
                 with suppress(Exception):
                     ssh.close()
 
+            active_in_use = len(self._in_use)
             for pair in list(self._in_use):
                 ssh, sftp = pair
                 with suppress(Exception):
@@ -184,8 +185,8 @@ class SFTPClientPool(LoggingMixin):
                     ssh.close()
                 self._in_use.discard(pair)
 
-            if self._in_use:
-                self.log.warning("Pool closed with %d active connections", len(self._in_use))
+            if active_in_use:
+                self.log.warning("Pool closed with %d active connections", active_in_use)
 
             self._semaphore = asyncio.Semaphore(self.pool_size)
 
