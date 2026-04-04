@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 
 from airflow.configuration import conf
 from airflow.providers.sftp.hooks.sftp import SFTPHookAsync
-from airflow.sdk.definitions._internal.logging_mixin import LoggingMixin
+from airflow.utils.log.logging_mixin import LoggingMixin
 
 if TYPE_CHECKING:
     import asyncssh
