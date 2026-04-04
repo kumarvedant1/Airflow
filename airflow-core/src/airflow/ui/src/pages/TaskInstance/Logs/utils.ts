@@ -17,9 +17,53 @@
  * under the License.
  */
 import type { Virtualizer } from "@tanstack/react-virtual";
+import type { TFunction } from "i18next";
+
+import type { TaskInstancesLogResponse } from "openapi/requests/types.gen";
+import { renderStructuredLog } from "src/components/renderStructuredLog";
+import { parseStreamingLogContent } from "src/utils/logs";
+
+type GetTextLinesOptions = {
+  fetchedData: TaskInstancesLogResponse | undefined;
+  logLevelFilters: Array<string>;
+  showSource: boolean;
+  showTimestamp: boolean;
+  sourceFilters: Array<string>;
+  translate: TFunction;
+};
+
+/**
+ * Parse raw streaming log data into plain-text lines.
+ * Shared between the log viewer (getParsedLogs) and search matching
+ * to avoid duplicating the parseStreamingLogContent + renderStructuredLog pipeline.
+ */
+export const getTextLines = ({
+  fetchedData,
+  logLevelFilters,
+  showSource,
+  showTimestamp,
+  sourceFilters,
+  translate,
+}: GetTextLinesOptions): Array<string> => {
+  const lines = parseStreamingLogContent(fetchedData);
+
+  return lines.map((line) =>
+    renderStructuredLog({
+      index: 0,
+      logLevelFilters,
+      logLink: "",
+      logMessage: line,
+      renderingMode: "text",
+      showSource,
+      showTimestamp,
+      sourceFilters,
+      translate,
+    }),
+  );
+};
 
 export type HighlightOptions = {
-  currentMatchIndex?: number;
+  currentMatchLineIndex?: number;
   hash: string;
   index: number;
   searchMatchIndices?: Set<number>;
@@ -31,8 +75,8 @@ export type HighlightOptions = {
  * Non-current search matches no longer highlight the full line — only inline
  * text highlighting via bg.subtle is used (see TaskLogContent).
  */
-export const getHighlightColor = ({ currentMatchIndex, hash, index }: HighlightOptions): string => {
-  if (currentMatchIndex !== undefined && index === currentMatchIndex) {
+export const getHighlightColor = ({ currentMatchLineIndex, hash, index }: HighlightOptions): string => {
+  if (currentMatchLineIndex !== undefined && index === currentMatchLineIndex) {
     return "bg.muted";
   }
   if (Boolean(hash) && index === Number(hash) - 1) {

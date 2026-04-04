@@ -24,7 +24,7 @@ describe("getHighlightColor", () => {
   it("returns bg.muted for the current search match", () => {
     expect(
       getHighlightColor({
-        currentMatchIndex: 3,
+        currentMatchLineIndex: 3,
         hash: "",
         index: 3,
         searchMatchIndices: new Set([1, 3, 5]),
@@ -35,7 +35,7 @@ describe("getHighlightColor", () => {
   it("returns transparent for a non-current search match (inline highlight only)", () => {
     expect(
       getHighlightColor({
-        currentMatchIndex: 1,
+        currentMatchLineIndex: 1,
         hash: "",
         index: 3,
         searchMatchIndices: new Set([1, 3, 5]),
@@ -66,7 +66,7 @@ describe("getHighlightColor", () => {
   it("returns transparent when search is active but line is not a match", () => {
     expect(
       getHighlightColor({
-        currentMatchIndex: 0,
+        currentMatchLineIndex: 0,
         hash: "",
         index: 7,
         searchMatchIndices: new Set([0, 2]),
@@ -77,7 +77,7 @@ describe("getHighlightColor", () => {
   it("current match takes priority over hash highlight on same line", () => {
     expect(
       getHighlightColor({
-        currentMatchIndex: 4,
+        currentMatchLineIndex: 4,
         hash: "5",
         index: 4,
         searchMatchIndices: new Set([4]),
@@ -88,7 +88,7 @@ describe("getHighlightColor", () => {
   it("hash highlight shown when search match is not current on same line", () => {
     expect(
       getHighlightColor({
-        currentMatchIndex: 0,
+        currentMatchLineIndex: 0,
         hash: "5",
         index: 4,
         searchMatchIndices: new Set([0, 4]),
@@ -99,7 +99,7 @@ describe("getHighlightColor", () => {
   it("returns transparent when searchMatchIndices is an empty Set", () => {
     expect(
       getHighlightColor({
-        currentMatchIndex: undefined,
+        currentMatchLineIndex: undefined,
         hash: "",
         index: 0,
         searchMatchIndices: new Set(),

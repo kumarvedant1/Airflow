@@ -30,7 +30,7 @@ import { getMetaKey } from "src/utils";
 import { getHighlightColor, scrollToBottom, scrollToTop, splitBySearchQuery } from "./utils";
 
 export type TaskLogContentProps = {
-  readonly currentMatchIndex?: number;
+  readonly currentMatchLineIndex?: number;
   readonly error: unknown;
   readonly isLoading: boolean;
   readonly logError: unknown;
@@ -109,7 +109,7 @@ const HighlightedText = ({ children, query }: { readonly children: ReactNode; re
 };
 
 export const TaskLogContent = ({
-  currentMatchIndex,
+  currentMatchLineIndex,
   error,
   isLoading,
   logError,
@@ -183,10 +183,10 @@ export const TaskLogContent = ({
   }, [isLoading, rowVirtualizer, hash, parsedLogs]);
 
   useLayoutEffect(() => {
-    if (currentMatchIndex !== undefined && !isLoading) {
-      rowVirtualizer.scrollToIndex(Math.min(currentMatchIndex + 3, parsedLogs.length - 1));
+    if (currentMatchLineIndex !== undefined && !isLoading) {
+      rowVirtualizer.scrollToIndex(Math.min(currentMatchLineIndex + 3, parsedLogs.length - 1));
     }
-  }, [currentMatchIndex, isLoading, rowVirtualizer, parsedLogs]);
+  }, [currentMatchLineIndex, isLoading, rowVirtualizer, parsedLogs]);
 
   const handleScrollTo = (to: "bottom" | "top") => {
     if (parsedLogs.length === 0) {
@@ -246,7 +246,7 @@ export const TaskLogContent = ({
                 _ltr={{ left: 0, right: "auto" }}
                 _rtl={{ left: "auto", right: 0 }}
                 bgColor={getHighlightColor({
-                  currentMatchIndex,
+                  currentMatchLineIndex,
                   hash,
                   index: virtualRow.index,
                   searchMatchIndices,
