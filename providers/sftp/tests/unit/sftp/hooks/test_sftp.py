@@ -1159,4 +1159,3 @@ class TestSFTPHookAsync:
         assert files is not None
         assert sorted(files) == sorted(["file1", "subdir"])
         sftp_client_mock.__aexit__.assert_awaited()
-

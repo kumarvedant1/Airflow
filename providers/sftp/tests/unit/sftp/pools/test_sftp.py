@@ -151,4 +151,3 @@ class TestSFTPClientPool:
         pool2 = SFTPClientPool("same_pool_conn", pool_size=4)
         assert pool2 is pool1  # Should be the same instance (singleton)
         assert pool2.pool_size == 4
-
