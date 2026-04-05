@@ -2317,7 +2317,7 @@
                     }
                 },
                 "extraVolumes": {
-                    "description": "Additional volumes attached to the Airflow Celery workers and pods created with pod-template-file.",
+                    "description": "Additi onal volumes attached to the Airflow Celery workers and pods created with pod-template-file (deprecated, use ``workers.celery.extraVolumes`` or/and ``workers.kubernetes.extraVolumes`` instead).",
                     "type": "array",
                     "default": [],
                     "items": {
@@ -3294,6 +3294,14 @@
                             ],
                             "default": null
                         },
+                        "extraVolumes": {
+                            "description": "Additional volumes attached to the Airflow Celery workers.",
+                            "type": "array",
+                            "default": [],
+                            "items": {
+                                "$ref": "#/definitions/io.k8s.api.core.v1.Volume"
+                            }
+                        },
                         "extraPorts": {
                             "description": "Expose additional ports of Airflow Celery worker container.",
                             "type": "array",
@@ -3636,6 +3644,14 @@
                                 "null"
                             ],
                             "default": null
+                        },
+                        "extraVolumes": {
+                            "description": "Additional volumes attached to the pods created with pod-template-file.",
+                            "type": "array",
+                            "default": [],
+                            "items": {
+                                "$ref": "#/definitions/io.k8s.api.core.v1.Volume"
+                            }
                         },
                         "nodeSelector": {
                             "description": "Select certain nodes for pods created with pod-template-file.",
