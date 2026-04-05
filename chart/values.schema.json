@@ -2301,7 +2301,7 @@
                     }
                 },
                 "extraInitContainers": {
-                    "description": "Add additional init containers into Airflow Celery workers and pods created with pod-template-file (templated).",
+                    "description": "Add additional init containers into Airflow Celery workers and pods created with pod-template-file (templated) (deprecated, use ``workers.celery.extraInitContainers`` and/or ``workers.kubernetes.extraInitContainers`` instead).",
                     "type": "array",
                     "default": [],
                     "items": {
@@ -3294,6 +3294,14 @@
                             ],
                             "default": null
                         },
+                        "extraInitContainers": {
+                            "description": "Add additional init containers into Airflow Celery workers (templated).",
+                            "type": "array",
+                            "default": [],
+                            "items": {
+                                "$ref": "#/definitions/io.k8s.api.core.v1.Container"
+                            }
+                        },
                         "extraPorts": {
                             "description": "Expose additional ports of Airflow Celery worker container.",
                             "type": "array",
@@ -3636,6 +3644,14 @@
                                 "null"
                             ],
                             "default": null
+                        },
+                        "extraInitContainers": {
+                            "description": "Add additional init containers into pods created with pod-template-file (templated).",
+                            "type": "array",
+                            "default": [],
+                            "items": {
+                                "$ref": "#/definitions/io.k8s.api.core.v1.Container"
+                            }
                         },
                         "nodeSelector": {
                             "description": "Select certain nodes for pods created with pod-template-file.",

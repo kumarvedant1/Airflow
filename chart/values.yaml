@@ -1025,6 +1025,10 @@ workers:
 
   # Add additional init containers into Airflow Celery workers
   # and pods created with pod-template-file (templated).
+  # (deprecated, use
+  #   `workers.celery.extraInitContainers` and/or
+  #   `workers.kubernetes.extraInitContainers`
+  # instead)
   extraInitContainers: []
 
   # Additional volumes and volume mounts attached to the
@@ -1379,6 +1383,9 @@ workers:
     # This setting tells Kubernetes that its ok to evict when it wants to scale a node down
     safeToEvict: ~
 
+    # Add additional init containers into Airflow Celery workers (templated)
+    extraInitContainers: []
+
     # Expose additional ports of Airflow Celery workers. These can be used for additional metric collection.
     extraPorts: []
 
@@ -1469,6 +1476,9 @@ workers:
 
     # This setting tells Kubernetes that its ok to evict when it wants to scale a node down
     safeToEvict: ~
+
+    # Add additional init containers into pods created with pod-template-file (templated)
+    extraInitContainers: []
 
     # Select certain nodes for pods created with pod-template-file
     nodeSelector: {}
