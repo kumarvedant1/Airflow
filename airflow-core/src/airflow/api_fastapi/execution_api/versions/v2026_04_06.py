@@ -184,3 +184,13 @@ class AddDagEndpoint(VersionChange):
     description = __doc__
 
     instructions_to_migrate_to_previous_version = (endpoint("/dags/{dag_id}", ["GET"]).didnt_exist,)
+
+
+class AddXcomBulkDeleteEndpoint(VersionChange):
+    """Add XCom bulk delete endpoint."""
+
+    description = __doc__
+
+    instructions_to_migrate_to_previous_version = (
+        endpoint("xcoms/{dag_id}/{run_id}", ["DELETE"]).didnt_exist,
+    )
