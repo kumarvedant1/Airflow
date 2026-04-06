@@ -67,6 +67,7 @@ const mockDag = {
   fileloc: "/files/dags/nested_task_groups.py",
   has_import_errors: false,
   has_task_concurrency_limits: false,
+  is_backfillable: true,
   is_favorite: false,
   is_paused: false,
   is_stale: false,
