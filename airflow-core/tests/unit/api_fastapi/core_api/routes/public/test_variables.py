@@ -523,14 +523,12 @@ class TestPatchVariable(TestVariableEndpoint):
         assert f"The Variable with key: `{TEST_VARIABLE_KEY}` was not found" == body["detail"]
 
     @conf_vars({("core", "multi_team"): "False"})
-    def test_patch_rejects_team_name_when_multi_team_disabled(self, test_client, testing_team):
-        with conf_vars({("core", "multi_team"): "True"}):
-            self.create_variables()
+    def test_patch_rejects_team_name_when_multi_team_disabled(self, test_client):
         body = {
             "key": TEST_VARIABLE_KEY,
             "value": "The new value",
             "description": "The new description",
-            "team_name": str(testing_team.name),
+            "team_name": "test_team",
         }
         response = test_client.patch(f"/variables/{TEST_VARIABLE_KEY}", json=body)
         assert response.status_code == 400
@@ -702,12 +700,12 @@ class TestPostVariable(TestVariableEndpoint):
         }
 
     @conf_vars({("core", "multi_team"): "False"})
-    def test_post_rejects_team_name_when_multi_team_disabled(self, test_client, testing_team):
+    def test_post_rejects_team_name_when_multi_team_disabled(self, test_client):
         body = {
             "key": "new variable key",
             "value": "new variable value",
             "description": "new variable description",
-            "team_name": str(testing_team.name),
+            "team_name": "test_team",
         }
         response = test_client.post("/variables", json=body)
         assert response.status_code == 400

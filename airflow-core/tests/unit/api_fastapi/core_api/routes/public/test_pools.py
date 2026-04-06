@@ -427,7 +427,7 @@ class TestPatchPool(TestPoolsEndpoint):
                 "name": POOL2_NAME,
                 "slots": POOL2_SLOT,
                 "include_deferred": POOL2_INCLUDE_DEFERRED,
-                "team_name": "test",
+                "team_name": "test_team",
             },
         )
         assert response.status_code == 400
@@ -549,7 +549,7 @@ class TestPostPool(TestPoolsEndpoint):
             json={
                 "name": "bad_team_pool",
                 "slots": 1,
-                "team_name": "test",
+                "team_name": "test_team",
             },
         )
         assert response.status_code == 400

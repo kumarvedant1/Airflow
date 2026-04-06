@@ -346,13 +346,13 @@ class TestPostConnection(TestConnectionEndpoint):
         }
 
     @conf_vars({("core", "multi_team"): "False"})
-    def test_post_rejects_team_name_when_multi_team_disabled(self, test_client, testing_team):
+    def test_post_rejects_team_name_when_multi_team_disabled(self, test_client):
         response = test_client.post(
             "/connections",
             json={
                 "connection_id": TEST_CONN_ID_2,
                 "conn_type": TEST_CONN_TYPE_2,
-                "team_name": testing_team.name,
+                "team_name": "test_team",
             },
         )
         assert response.status_code == 400
@@ -988,14 +988,14 @@ class TestPatchConnection(TestConnectionEndpoint):
         assert response.status_code == 422
 
     @conf_vars({("core", "multi_team"): "False"})
-    def test_patch_rejects_team_name_when_multi_team_disabled(self, test_client, testing_team):
+    def test_patch_rejects_team_name_when_multi_team_disabled(self, test_client):
         self.create_connection()
         response = test_client.patch(
             f"/connections/{TEST_CONN_ID_2}",
             json={
                 "connection_id": TEST_CONN_ID_2,
                 "conn_type": "new_type",
-                "team_name": testing_team.name,
+                "team_name": "test_team",
             },
         )
         assert response.status_code == 400
