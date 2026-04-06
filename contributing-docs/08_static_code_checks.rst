@@ -226,6 +226,24 @@ You can always skip running the tests by providing ``--no-verify`` flag to the
 
 To check other usage types of the pre-commit framework, see `Pre-commit website <https://pre-commit.com/>`__.
 
+.. agent-skill::
+   :id: run-static-checks
+   :category: linting
+   :description: Run fast pre-commit stage checks (ruff, mypy, license headers) before committing. Runs on host and inside Breeze.
+   :local: prek run --from-ref {target_branch} --stage pre-commit
+   :breeze: prek run --from-ref {target_branch} --stage pre-commit
+   :params: target_branch:required
+   :expected-output: All checks passed.
+
+.. agent-skill::
+   :id: format-and-lint
+   :category: linting
+   :description: Format and lint a single Python file with ruff immediately after writing or editing it. Always scope to the provider with --project.
+   :local: uv run --project {project} ruff format {file_path} && uv run --project {project} ruff check --fix {file_path}
+   :breeze: ruff format {file_path} && ruff check --fix {file_path}
+   :params: project:required,file_path:required
+   :expected-output: All checks passed
+
 Disabling particular checks
 ---------------------------
 
@@ -276,6 +294,31 @@ Manual prek hooks
 Most of the checks we run are configured to run automatically when you commit the code or push PR. However,
 there are some checks that are not run automatically and you need to run them manually. You can run
 them manually by running ``prek --stage manual <hook-id>``.
+
+Special pin-versions prek
+-------------------------
+
+There is a separate prek ``pin-versions`` prek hook which is used to pin versions of
+GitHub Actions in the CI workflows.
+
+This action requires ``GITHUB_TOKEN`` to be set, otherwise you might hit the rate limits with GitHub API, it
+It is not run automatically when you commit the code but in runs as a separate job in the CI.
+However, you can run it manually by running:
+
+.. code-block:: bash
+
+    export GITHUB_TOKEN=YOUR_GITHUB_TOKEN
+    prek --all-files --stage manual --verbose pin-versions
+
+.. agent-skill::
+   :id: run-manual-checks
+   :category: linting
+   :description: Run slower manual-stage checks before opening a PR. Requires run-static-checks to pass first.
+   :local: prek run --from-ref {target_branch} --stage manual
+   :breeze: prek run --from-ref {target_branch} --stage manual
+   :prereqs: run-static-checks
+   :params: target_branch:required
+   :expected-output: All checks passed.
 
 Mypy checks
 -----------

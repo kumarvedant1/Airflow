@@ -241,6 +241,17 @@ For example:
 
 Will build ``fab`` provider documentation and clean build artifacts before.
 
+.. agent-skill::
+   :id: build-docs
+   :category: documentation
+   :description: Build Airflow documentation. Pass package to build only that provider's docs (much faster). Uses ``uv run --group docs build-docs`` on the host and Breeze inside the container or as a fallback.
+   :local: uv run --group docs build-docs {package}
+   :breeze: breeze build-docs {package}
+   :fallback: breeze build-docs {package}
+   :prereqs: setup-breeze-environment
+   :params: package:optional
+   :expected-output: Build finished.
+
 Inventory cache handling
 ........................
 
