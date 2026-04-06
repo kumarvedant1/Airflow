@@ -7068,6 +7068,11 @@
                             "type": "integer",
                             "default": 5
                         },
+                        "path": {
+                            "description": "Webserver Liveness probe path.",
+                            "type": "string",
+                            "default": null
+                        },
                         "periodSeconds": {
                             "description": "Webserver Liveness probe period seconds.",
                             "type": "integer",
@@ -7100,6 +7105,11 @@
                             "type": "integer",
                             "default": 5
                         },
+                        "path": {
+                            "description": "Webserver Readiness probe path.",
+                            "type": "string",
+                            "default": null
+                        },
                         "periodSeconds": {
                             "description": "Webserver Readiness probe period seconds.",
                             "type": "integer",
@@ -7131,6 +7141,11 @@
                             "description": "Webserver Startup probe failure threshold.",
                             "type": "integer",
                             "default": 6
+                        },
+                        "path": {
+                            "description": "Webserver Startup probe path.",
+                            "type": "string",
+                            "default": null
                         },
                         "periodSeconds": {
                             "description": "Webserver Startup probe period seconds.",
