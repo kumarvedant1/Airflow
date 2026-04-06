@@ -26,6 +26,11 @@ from fsspec.utils import stringify_path
 from upath import UPath
 from upath.extensions import ProxyUPath, classmethod_or_method
 
+if TYPE_CHECKING:
+    _classmethod_or_method = classmethod
+else:
+    _classmethod_or_method = classmethod_or_method
+
 from airflow.sdk.io.stat import stat_result
 from airflow.sdk.io.store import attach
 
@@ -127,7 +132,7 @@ class ObjectStoragePath(ProxyUPath):
         # requiring individual overrides for each one.
         self._inject_authenticated_fs(self.__wrapped__)
 
-    @classmethod_or_method  # type: ignore[arg-type]
+    @_classmethod_or_method
     def _from_upath(cls_or_self, upath, /):
         """Wrap a UPath, propagating conn_id from the calling instance."""
         is_instance = isinstance(cls_or_self, ObjectStoragePath)
