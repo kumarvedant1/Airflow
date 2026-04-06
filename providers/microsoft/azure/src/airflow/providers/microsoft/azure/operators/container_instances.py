@@ -479,21 +479,21 @@ class AzureContainerInstancesOperator(BaseOperator):
                 )
             )
 
-        if self.xcom_all is not None:
-            logs = self.hook.get_logs(self.resource_group, self.name)
-            if logs is None:
-                context["ti"].xcom_push(key="logs", value=[])
-            elif self.xcom_all:
-                context["ti"].xcom_push(key="logs", value=logs)
-            else:
-                context["ti"].xcom_push(key="logs", value=logs[-1:])
+        try:
+            if self.xcom_all is not None:
+                logs = self.hook.get_logs(self.resource_group, self.name)
+                if logs is None:
+                    context["ti"].xcom_push(key="logs", value=[])
+                elif self.xcom_all:
+                    context["ti"].xcom_push(key="logs", value=logs)
+                else:
+                    context["ti"].xcom_push(key="logs", value=logs[-1:])
 
-        self.log.info("Container had exit code: %s", exit_code)
-
-        if self.remove_on_success:
-            self.on_kill()
-
-        return exit_code
+            self.log.info("Container had exit code: %s", exit_code)
+            return exit_code
+        finally:
+            if self.remove_on_success:
+                self.on_kill()
 
     def _monitor_logging(self, resource_group: str, name: str) -> int:
         last_state = None
