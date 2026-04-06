@@ -49,7 +49,7 @@ class TestZendeskHook:
         assert zenpy_client.users.domain == "zendesk.com"
         assert zenpy_client.users.session.auth == ("user@gmail.com", "eb243592-faa2-4ba2-a551q-1afdf565c889")
         assert not zenpy_client.cache.disabled
-        assert self.hook._ZendeskHook__url == "https://yoursubdomain.zendesk.com"
+        assert self.hook._url == "https://yoursubdomain.zendesk.com"
 
     def test_get_ticket(self):
         zenpy_client = self.hook.get_conn()
@@ -83,3 +83,46 @@ class TestZendeskHook:
         with patch.object(zenpy_client.tickets, "delete") as search_mock:
             self.hook.delete_tickets(ticket, extra_parameter="extra_parameter")
             search_mock.assert_called_once_with(ticket, extra_parameter="extra_parameter")
+
+    def test_hook_init_with_token_flag(self):
+        conn_id = "zendesk_token_flag"
+        conn = Connection(
+            conn_id=conn_id,
+            conn_type="zendesk",
+            host="yoursubdomain.zendesk.com",
+            login="user@gmail.com",
+            password="my_api_token",
+            extra={"use_token": True},
+        )
+        with patch("airflow.providers.zendesk.hooks.zendesk.ZendeskHook.get_connection", return_value=conn):
+            hook = ZendeskHook(zendesk_conn_id=conn_id)
+            zenpy_client = hook.get_conn()
+            assert zenpy_client.users.session.auth == ("user@gmail.com/token", "my_api_token")
+
+    def test_hook_init_with_direct_token(self):
+        conn_id = "zendesk_direct_token"
+        conn = Connection(
+            conn_id=conn_id,
+            conn_type="zendesk",
+            host="yoursubdomain.zendesk.com",
+            login="user@gmail.com",
+            extra={"token": "direct_token"},
+        )
+        with patch("airflow.providers.zendesk.hooks.zendesk.ZendeskHook.get_connection", return_value=conn):
+            hook = ZendeskHook(zendesk_conn_id=conn_id)
+            zenpy_client = hook.get_conn()
+            assert zenpy_client.users.session.auth == ("user@gmail.com/token", "direct_token")
+
+    def test_hook_init_with_oauth_token(self):
+        conn_id = "zendesk_oauth_token"
+        conn = Connection(
+            conn_id=conn_id,
+            conn_type="zendesk",
+            host="yoursubdomain.zendesk.com",
+            login="user@gmail.com",
+            extra={"oauth_token": "my_oauth_token"},
+        )
+        with patch("airflow.providers.zendesk.hooks.zendesk.ZendeskHook.get_connection", return_value=conn):
+            hook = ZendeskHook(zendesk_conn_id=conn_id)
+            zenpy_client = hook.get_conn()
+            assert zenpy_client.users.session.headers["Authorization"] == "Bearer my_oauth_token"
