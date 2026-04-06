@@ -16,9 +16,9 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { Box, Code, Mark, VStack, IconButton } from "@chakra-ui/react";
+import { Box, Code, VStack, IconButton } from "@chakra-ui/react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { type JSX, type ReactNode, useLayoutEffect, useRef, useCallback, useEffect } from "react";
+import { type JSX, useLayoutEffect, useRef, useCallback, useEffect } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useTranslation } from "react-i18next";
 import { FiChevronDown, FiChevronUp } from "react-icons/fi";
@@ -27,7 +27,8 @@ import { ErrorAlert } from "src/components/ErrorAlert";
 import { ProgressBar, Tooltip } from "src/components/ui";
 import { getMetaKey } from "src/utils";
 
-import { getHighlightColor, scrollToBottom, scrollToTop, splitBySearchQuery } from "./utils";
+import { HighlightedText } from "./HighlightedText";
+import { getHighlightColor, scrollToBottom, scrollToTop } from "./utils";
 
 export type TaskLogContentProps = {
   readonly currentMatchLineIndex?: number;
@@ -82,29 +83,6 @@ const ScrollToButton = ({
         {direction === "bottom" ? <FiChevronDown /> : <FiChevronUp />}
       </IconButton>
     </Tooltip>
-  );
-};
-
-const HighlightedText = ({ children, query }: { readonly children: ReactNode; readonly query?: string }) => {
-  if (typeof query !== "string" || query.length === 0 || typeof children !== "string") {
-    return children;
-  }
-
-  const segments = splitBySearchQuery(children, query);
-
-  return (
-    <span>
-      {segments.map((segment, idx) =>
-        segment.highlight ? (
-          // eslint-disable-next-line react/no-array-index-key
-          <Mark bg="bg.subtle" key={idx}>
-            {segment.text}
-          </Mark>
-        ) : (
-          segment.text
-        ),
-      )}
-    </span>
   );
 };
 
