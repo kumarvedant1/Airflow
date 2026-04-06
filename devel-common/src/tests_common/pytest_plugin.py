@@ -2414,6 +2414,7 @@ def mocked_parse(spy_agency):
             task=task,
             _ti_context_from_server=what.ti_context,
             max_tries=what.ti_context.max_tries,
+            queued_dttm=getattr(what.ti_context, "queued_dttm", None),
             start_date=what.start_date,
         )
         if hasattr(parse, "spy"):

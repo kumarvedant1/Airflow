@@ -140,6 +140,7 @@ def ti_run(
             TI.hostname,
             TI.unixname,
             TI.pid,
+            TI.queued_dttm,
             # This selects the raw JSON value, bypassing the deserialization -- we want that to happen on the
             # client
             column("next_kwargs", JSON),
@@ -287,6 +288,8 @@ def ti_run(
         if ti.next_method:
             context.next_method = ti.next_method
             context.next_kwargs = ti.next_kwargs
+        if ti.queued_dttm:
+            context.queued_dttm = ti.queued_dttm
 
         return context
     except SQLAlchemyError:

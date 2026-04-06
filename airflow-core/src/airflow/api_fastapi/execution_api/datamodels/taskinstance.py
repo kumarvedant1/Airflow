@@ -384,6 +384,9 @@ class TIRunContext(BaseModel):
     should_retry: bool = False
     """If the ti encounters an error, whether it should enter retry or failed state."""
 
+    queued_dttm: UtcDateTime | None = None
+    """When the task instance was queued."""
+
 
 class PrevSuccessfulDagRunResponse(BaseModel):
     """Schema for response with previous successful DagRun information for Task Template Context."""

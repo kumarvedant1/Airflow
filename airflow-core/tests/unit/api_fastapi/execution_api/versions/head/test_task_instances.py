@@ -840,6 +840,73 @@ class TestTIRunState:
         assert logs[0].owner == ti.task.owner
         assert logs[0].extra == '{"host_name": "random-hostname"}'
 
+    def test_ti_run_includes_queued_dttm(self, client, session, create_task_instance, time_machine):
+        """Test that queued_dttm is included in the TIRunContext response when set on the TaskInstance."""
+        instant_str = "2024-09-30T12:00:00Z"
+        instant = timezone.parse(instant_str)
+        queued_str = "2024-09-30T11:55:00Z"
+        queued_time = timezone.parse(queued_str)
+        time_machine.move_to(instant, tick=False)
+
+        ti = create_task_instance(
+            task_id="test_ti_run_queued_dttm",
+            state=State.QUEUED,
+            dagrun_state=DagRunState.RUNNING,
+            session=session,
+            start_date=instant,
+            dag_id=str(uuid4()),
+        )
+        ti.queued_dttm = queued_time
+        session.commit()
+
+        response = client.patch(
+            f"/execution/task-instances/{ti.id}/run",
+            json={
+                "state": "running",
+                "hostname": "random-hostname",
+                "unixname": "random-unixname",
+                "pid": 100,
+                "start_date": instant_str,
+            },
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert result["queued_dttm"] == queued_str
+
+    def test_ti_run_excludes_queued_dttm_when_not_set(
+        self, client, session, create_task_instance, time_machine
+    ):
+        """Test that queued_dttm is excluded from the response when not set on the TaskInstance."""
+        instant_str = "2024-09-30T12:00:00Z"
+        instant = timezone.parse(instant_str)
+        time_machine.move_to(instant, tick=False)
+
+        ti = create_task_instance(
+            task_id="test_ti_run_no_queued_dttm",
+            state=State.QUEUED,
+            dagrun_state=DagRunState.RUNNING,
+            session=session,
+            start_date=instant,
+            dag_id=str(uuid4()),
+        )
+        session.commit()
+
+        response = client.patch(
+            f"/execution/task-instances/{ti.id}/run",
+            json={
+                "state": "running",
+                "hostname": "random-hostname",
+                "unixname": "random-unixname",
+                "pid": 100,
+                "start_date": instant_str,
+            },
+        )
+
+        assert response.status_code == 200
+        result = response.json()
+        assert "queued_dttm" not in result
+
 
 class TestTIUpdateState:
     def setup_method(self):
