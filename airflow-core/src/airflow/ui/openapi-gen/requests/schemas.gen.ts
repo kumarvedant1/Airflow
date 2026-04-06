@@ -4623,7 +4623,7 @@ export const $PatchTaskInstanceBody = {
     additionalProperties: false,
     type: 'object',
     title: 'PatchTaskInstanceBody',
-    description: 'Request body for Clear Task Instances endpoint.'
+    description: 'Request body for patching task instance state.'
 } as const;
 
 export const $PluginCollectionResponse = {
