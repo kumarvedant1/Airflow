@@ -47,8 +47,9 @@ class TestStats:
             }
         ):
             importlib.reload(airflow._shared.observability.metrics.stats)
-            factory = stats_utils.get_stats_factory(airflow.observability.stats.Stats)
-            airflow.observability.stats.Stats.initialize(factory=factory)
+            airflow.observability.stats.Stats.initialize(
+                factory=stats_utils.get_stats_factory(), export_legacy_names=True
+            )
             error_message = re.escape(
                 "Your custom StatsD client must extend the statsd."
                 "StatsClient in order to ensure backwards compatibility."
@@ -73,10 +74,12 @@ class TestDogStats:
             }
         ):
             importlib.reload(airflow.observability.stats)
-            factory = stats_utils.get_stats_factory(airflow.observability.stats.Stats)
-            airflow.observability.stats.Stats.initialize(factory=factory)
-            assert isinstance(airflow.observability.stats.Stats.dogstatsd, DogStatsd)
-            assert not hasattr(airflow.observability.stats.Stats, "statsd")
+            airflow.observability.stats.Stats.initialize(
+                factory=stats_utils.get_stats_factory(), export_legacy_names=True
+            )
+            backend = airflow._shared.observability.metrics.stats._get_backend()
+            assert isinstance(backend.dogstatsd, DogStatsd)
+            assert not hasattr(backend, "statsd")
         # Avoid side-effects
         importlib.reload(airflow.observability.stats)
 
@@ -90,8 +93,10 @@ class TestDogStats:
             }
         ):
             importlib.reload(airflow.observability.stats)
-            factory = stats_utils.get_stats_factory(airflow.observability.stats.Stats)
-            airflow.observability.stats.Stats.initialize(factory=factory)
-            assert isinstance(airflow.observability.stats.Stats.dogstatsd, DogStatsd)
-            assert not hasattr(airflow.observability.stats.Stats, "statsd")
+            airflow.observability.stats.Stats.initialize(
+                factory=stats_utils.get_stats_factory(), export_legacy_names=True
+            )
+            backend = airflow._shared.observability.metrics.stats._get_backend()
+            assert isinstance(backend.dogstatsd, DogStatsd)
+            assert not hasattr(backend, "statsd")
         importlib.reload(airflow.observability.stats)
