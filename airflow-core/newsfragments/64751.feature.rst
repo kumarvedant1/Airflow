@@ -1,0 +1,1 @@
+Allow DeadlineAlert intervals to be dynamically resolved at DAG parse time using objects such as VariableInterval.

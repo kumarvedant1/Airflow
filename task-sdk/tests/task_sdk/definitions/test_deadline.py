@@ -22,7 +22,8 @@ import pytest
 from task_sdk.definitions.test_callback import TEST_CALLBACK_KWARGS, TEST_CALLBACK_PATH, UNIMPORTABLE_DOT_PATH
 
 from airflow.sdk.definitions.callback import AsyncCallback, SyncCallback
-from airflow.sdk.definitions.deadline import DeadlineAlert, DeadlineReference
+from airflow.sdk.definitions.deadline import DeadlineAlert, DeadlineReference, VariableInterval
+from airflow.sdk.definitions.variable import Variable
 
 DAG_ID = "dag_id_1"
 RUN_ID = 1
@@ -162,3 +163,41 @@ class TestDeadlineAlert:
                 interval=timedelta(hours=1),
                 callback="not_a_callback",  # type: ignore
             )
+
+
+class TestVariableInterval:
+    @pytest.mark.parametrize(
+        ("value", "expected"),
+        [
+            ("3", timedelta(minutes=3)),
+            ("10", timedelta(minutes=10)),
+            ("05", timedelta(minutes=5)),  # leading zero
+        ],
+    )
+    def test_resolve_valid(self, mocker, value, expected):
+        mocker.patch.object(Variable, "get", return_value=value)
+
+        interval = VariableInterval(key="test_interval")
+
+        assert interval.resolve() == expected
+
+    @pytest.mark.parametrize(
+        ("value", "side_effect", "match"),
+        [
+            (None, KeyError("missing"), "not found"),
+            ("abc", None, "must be an integer"),
+            ("", None, "must be an integer"),
+            ("0", None, "must be > 0"),
+            ("-5", None, "must be > 0"),
+        ],
+    )
+    def test_resolve_invalid(self, mocker, value, side_effect, match):
+        if side_effect:
+            mocker.patch.object(Variable, "get", side_effect=side_effect)
+        else:
+            mocker.patch.object(Variable, "get", return_value=value)
+
+        interval = VariableInterval(key="test_interval")
+
+        with pytest.raises(ValueError, match=match):
+            interval.resolve()
