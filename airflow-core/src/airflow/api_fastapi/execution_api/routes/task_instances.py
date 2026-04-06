@@ -469,7 +469,7 @@ def _emit_task_span(ti, state):
                 "airflow.task_instance.try_number": ti.try_number,
                 "airflow.task_instance.map_index": ti.map_index if ti.map_index is not None else -1,
                 "airflow.task_instance.state": state,
-                "airflow.task_instance.id": ti.id,
+                "airflow.task_instance.id": str(ti.id),
             }
         )
         status_code = StatusCode.OK if state == TaskInstanceState.SUCCESS else StatusCode.ERROR
@@ -525,7 +525,10 @@ def _create_ti_state_update_query_and_update_state(
                     ti_patch_payload.outlet_events,
                     session,
                 )
-        _emit_task_span(ti, state=updated_state)
+        try:
+            _emit_task_span(ti, state=updated_state)
+        except Exception:
+            log.warning("Failed to emit task span", exc_info=True)
     elif isinstance(ti_patch_payload, TIDeferredStatePayload):
         # Calculate timeout if it was passed
         timeout = None
