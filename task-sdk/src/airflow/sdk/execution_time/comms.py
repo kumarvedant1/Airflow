@@ -895,6 +895,13 @@ class SetRenderedMapIndex(BaseModel):
     type: Literal["SetRenderedMapIndex"] = "SetRenderedMapIndex"
 
 
+class SetTaskInstanceNote(BaseModel):
+    """Payload for setting note for a task instance."""
+
+    note: str
+    type: Literal["SetTaskInstanceNote"] = "SetTaskInstanceNote"
+
+
 class TriggerDagRun(TriggerDAGRunPayload):
     dag_id: str
     run_id: Annotated[str, Field(title="Dag Run Id")]
@@ -1070,6 +1077,7 @@ ToSupervisor = Annotated[
     | RetryTask
     | SetRenderedFields
     | SetRenderedMapIndex
+    | SetTaskInstanceNote
     | SetXCom
     | SkipDownstreamTasks
     | SucceedTask
