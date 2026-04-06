@@ -109,7 +109,7 @@ export const Logs = () => {
   const getLogString = () => textLines.filter((line) => line !== "").join("\n");
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
+  const [activeSearchIndex, setActiveSearchIndex] = useState(0);
 
   const getSearchMatchIndices = () => {
     if (!searchQuery) {
@@ -131,18 +131,18 @@ export const Logs = () => {
 
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
-    setCurrentMatchIndex(0);
+    setActiveSearchIndex(0);
   };
 
   const handleSearchNext = () => {
     if (searchMatchIndices.length > 0) {
-      setCurrentMatchIndex((prev) => (prev + 1) % searchMatchIndices.length);
+      setActiveSearchIndex((prev) => (prev + 1) % searchMatchIndices.length);
     }
   };
 
   const handleSearchPrevious = () => {
     if (searchMatchIndices.length > 0) {
-      setCurrentMatchIndex((prev) => (prev - 1 + searchMatchIndices.length) % searchMatchIndices.length);
+      setActiveSearchIndex((prev) => (prev - 1 + searchMatchIndices.length) % searchMatchIndices.length);
     }
   };
 
@@ -183,7 +183,7 @@ export const Logs = () => {
     getLogString,
     onSelectTryNumber,
     search: {
-      currentMatchIndex,
+      currentMatchIndex: activeSearchIndex,
       onSearchChange: handleSearchChange,
       onSearchNext: handleSearchNext,
       onSearchPrevious: handleSearchPrevious,
@@ -204,7 +204,7 @@ export const Logs = () => {
   };
 
   const logContentProps: TaskLogContentProps = {
-    currentMatchLineIndex: searchMatchIndices[currentMatchIndex],
+    currentMatchLineIndex: searchMatchIndices[activeSearchIndex],
     error,
     isLoading: isLoading || isLoadingLogs,
     logError,
