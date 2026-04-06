@@ -453,7 +453,7 @@ def get_otel_logger(
         MeterProvider(
             resource=resource,
             metric_readers=readers,
-            shutdown_on_exit=False,
+            shutdown_on_exit=True,
         ),
     )
 
