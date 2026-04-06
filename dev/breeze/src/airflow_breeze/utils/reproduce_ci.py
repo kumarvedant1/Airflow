@@ -125,7 +125,14 @@ def build_reproduction_command_from_context(
                 argv.extend([flag, str(item)])
             continue
 
-        argv.extend([flag, str(value)])
+        # Non-multiple option. For options with nargs > 1, Click provides a tuple/list
+        # here, so we should expand each element as its own CLI argument instead of
+        # stringifying the whole collection.
+        if isinstance(value, (list, tuple)):
+            argv.append(flag)
+            argv.extend(str(v) for v in value)
+        else:
+            argv.extend([flag, str(value)])
 
     # Append positional arguments at the end
     for param in ctx.command.params:
