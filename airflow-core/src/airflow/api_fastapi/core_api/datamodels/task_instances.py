@@ -25,9 +25,11 @@ from pydantic import (
     AliasPath,
     AwareDatetime,
     BeforeValidator,
+    Discriminator,
     Field,
     NonNegativeInt,
     StringConstraints,
+    Tag,
     ValidationError,
     field_validator,
     model_validator,
@@ -38,6 +40,13 @@ from airflow.api_fastapi.core_api.datamodels.dag_versions import DagVersionRespo
 from airflow.api_fastapi.core_api.datamodels.job import JobResponse
 from airflow.api_fastapi.core_api.datamodels.trigger import TriggerResponse
 from airflow.utils.state import TaskInstanceState
+
+
+class NewTaskResponse(BaseModel):
+    """Lightweight response for new tasks that don't have TaskInstances yet."""
+
+    task_id: str
+    task_display_name: str
 
 
 class TaskInstanceResponse(BaseModel):
@@ -86,6 +95,28 @@ class TaskInstanceCollectionResponse(BaseModel):
     """Task Instance Collection serializer for responses."""
 
     task_instances: Iterable[TaskInstanceResponse]
+    total_entries: int
+
+
+def _task_instance_discriminator(v: Any) -> str:
+    """Discriminate between TaskInstanceResponse and NewTaskResponse in the union."""
+    if isinstance(v, NewTaskResponse):
+        return "new"
+    if isinstance(v, dict):
+        return "new" if "id" not in v else "full"
+    # ORM objects and TaskInstanceResponse instances
+    return "full"
+
+
+class ClearTaskInstanceCollectionResponse(BaseModel):
+    """Response for clear dag run dry run, which may contain new tasks without full TaskInstance data."""
+
+    task_instances: Iterable[
+        Annotated[
+            Annotated[TaskInstanceResponse, Tag("full")] | Annotated[NewTaskResponse, Tag("new")],
+            Discriminator(_task_instance_discriminator),
+        ]
+    ]
     total_entries: int
 
 
