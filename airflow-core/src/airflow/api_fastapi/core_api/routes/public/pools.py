@@ -31,7 +31,7 @@ from airflow.api_fastapi.common.parameters import (
     SortParam,
 )
 from airflow.api_fastapi.common.router import AirflowRouter
-from airflow.api_fastapi.core_api.datamodels.common import BulkBody, BulkResponse
+from airflow.api_fastapi.core_api.datamodels.common import BulkAction, BulkBody, BulkResponse
 from airflow.api_fastapi.core_api.datamodels.pools import (
     PoolBody,
     PoolCollectionResponse,
@@ -201,9 +201,9 @@ def bulk_pools(
         invalid_entities = []
 
         for action in request.actions:
-            if action.action in ("create", "update"):
+            if action.action == BulkAction.CREATE or action.action == BulkAction.UPDATE:
                 for entity in action.entities:
-                    if entity.team_name is not None:
+                    if isinstance(entity, PoolBody) and entity.team_name is not None:
                         invalid_entities.append(entity.pool)
 
         if invalid_entities:
