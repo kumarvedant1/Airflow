@@ -21,6 +21,7 @@ from unittest import mock
 import pytest
 from sqlalchemy import func, select
 
+from airflow.api_fastapi.common.exceptions import MULTI_TEAM_ERROR_MESSAGE
 from airflow.models.pool import Pool
 from airflow.models.team import Team
 from airflow.utils.session import provide_session
@@ -430,10 +431,7 @@ class TestPatchPool(TestPoolsEndpoint):
             },
         )
         assert response.status_code == 400
-        assert (
-            response.json()["detail"]
-            == "team_name cannot be set when multi_team mode is disabled. Please contact your administrator."
-        )
+        assert response.json()["detail"] == MULTI_TEAM_ERROR_MESSAGE
 
 
 class TestPostPool(TestPoolsEndpoint):
@@ -555,10 +553,7 @@ class TestPostPool(TestPoolsEndpoint):
             },
         )
         assert response.status_code == 400
-        assert (
-            response.json()["detail"]
-            == "team_name cannot be set when multi_team mode is disabled. Please contact your administrator."
-        )
+        assert response.json()["detail"] == MULTI_TEAM_ERROR_MESSAGE
 
     def test_should_respond_401(self, unauthenticated_test_client):
         response = unauthenticated_test_client.post("/pools", json={})

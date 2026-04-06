@@ -25,6 +25,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from airflow.api_fastapi.common.db.common import SessionDep, paginated_select
+from airflow.api_fastapi.common.exceptions import MULTI_TEAM_ERROR_MESSAGE
 from airflow.api_fastapi.common.parameters import (
     QueryConnectionIdPatternSearch,
     QueryLimit,
@@ -164,7 +165,7 @@ def post_connection(
     if post_body.team_name is not None and not conf.getboolean("core", "multi_team"):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "team_name cannot be set when multi_team mode is disabled. Please contact your administrator.",
+            MULTI_TEAM_ERROR_MESSAGE,
         )
 
     connection = Connection(**post_body.model_dump(by_alias=True))
@@ -180,6 +181,24 @@ def bulk_connections(
     session: SessionDep,
 ) -> BulkResponse:
     """Bulk create, update, and delete connections."""
+    if not conf.getboolean("core", "multi_team"):
+        invalid_entities = []
+
+        for action in request.actions:
+            if action.action in ("create", "update"):
+                for entity in action.entities:
+                    if entity.team_name is not None:
+                        invalid_entities.append(entity.connection_id)
+
+        if invalid_entities:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                {
+                    "message": MULTI_TEAM_ERROR_MESSAGE,
+                    "invalid_connection_ids": invalid_entities,
+                },
+            )
+
     return BulkConnectionService(session=session, request=request).handle_request()
 
 
@@ -203,7 +222,7 @@ def patch_connection(
     if patch_body.team_name is not None and not conf.getboolean("core", "multi_team"):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "team_name cannot be set when multi_team mode is disabled. Please contact your administrator.",
+            MULTI_TEAM_ERROR_MESSAGE,
         )
 
     if patch_body.connection_id != connection_id:

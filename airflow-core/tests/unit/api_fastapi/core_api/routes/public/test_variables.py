@@ -24,6 +24,7 @@ from unittest.mock import ANY
 import pytest
 from sqlalchemy import select
 
+from airflow.api_fastapi.common.exceptions import MULTI_TEAM_ERROR_MESSAGE
 from airflow.models.team import Team
 from airflow.models.variable import Variable
 from airflow.utils.session import provide_session
@@ -533,10 +534,7 @@ class TestPatchVariable(TestVariableEndpoint):
         }
         response = test_client.patch(f"/variables/{TEST_VARIABLE_KEY}", json=body)
         assert response.status_code == 400
-        assert (
-            response.json()["detail"]
-            == "team_name cannot be set when multi_team mode is disabled. Please contact your administrator."
-        )
+        assert response.json()["detail"] == MULTI_TEAM_ERROR_MESSAGE
 
     @pytest.mark.enable_redact
     def test_patch_with_update_mask_description_only(self, test_client, session):
@@ -713,10 +711,7 @@ class TestPostVariable(TestVariableEndpoint):
         }
         response = test_client.post("/variables", json=body)
         assert response.status_code == 400
-        assert (
-            response.json()["detail"]
-            == "team_name cannot be set when multi_team mode is disabled. Please contact your administrator."
-        )
+        assert response.json()["detail"] == MULTI_TEAM_ERROR_MESSAGE
 
     @pytest.mark.parametrize(
         "body",

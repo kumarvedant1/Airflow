@@ -25,6 +25,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from airflow.api_fastapi.common.exceptions import MULTI_TEAM_ERROR_MESSAGE
 from airflow.api_fastapi.core_api.datamodels.common import BulkActionResponse, BulkBody
 from airflow.api_fastapi.core_api.datamodels.connections import ConnectionBody
 from airflow.api_fastapi.core_api.services.public.connections import BulkConnectionService
@@ -355,10 +356,7 @@ class TestPostConnection(TestConnectionEndpoint):
             },
         )
         assert response.status_code == 400
-        assert (
-            response.json()["detail"]
-            == "team_name cannot be set when multi_team mode is disabled. Please contact your administrator."
-        )
+        assert response.json()["detail"] == MULTI_TEAM_ERROR_MESSAGE
 
     @pytest.mark.parametrize(
         "body",
@@ -1001,10 +999,7 @@ class TestPatchConnection(TestConnectionEndpoint):
             },
         )
         assert response.status_code == 400
-        assert (
-            response.json()["detail"]
-            == "team_name cannot be set when multi_team mode is disabled. Please contact your administrator."
-        )
+        assert response.json()["detail"] == MULTI_TEAM_ERROR_MESSAGE
 
 
 class TestConnection(TestConnectionEndpoint):

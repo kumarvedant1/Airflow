@@ -23,6 +23,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 
 from airflow.api_fastapi.common.db.common import SessionDep, paginated_select
+from airflow.api_fastapi.common.exceptions import MULTI_TEAM_ERROR_MESSAGE
 from airflow.api_fastapi.common.parameters import (
     QueryLimit,
     QueryOffset,
@@ -147,7 +148,7 @@ def patch_pool(
     if patch_body.team_name is not None and not conf.getboolean("core", "multi_team"):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "team_name cannot be set when multi_team mode is disabled. Please contact your administrator.",
+            MULTI_TEAM_ERROR_MESSAGE,
         )
 
     if patch_body.name and patch_body.name != pool_name:
@@ -179,7 +180,7 @@ def post_pool(
     if body.team_name is not None and not conf.getboolean("core", "multi_team"):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            "team_name cannot be set when multi_team mode is disabled. Please contact your administrator.",
+            MULTI_TEAM_ERROR_MESSAGE,
         )
 
     pool = Pool(**body.model_dump())
@@ -196,4 +197,22 @@ def bulk_pools(
     session: SessionDep,
 ) -> BulkResponse:
     """Bulk create, update, and delete pools."""
+    if not conf.getboolean("core", "multi_team"):
+        invalid_entities = []
+
+        for action in request.actions:
+            if action.action in ("create", "update"):
+                for entity in action.entities:
+                    if entity.team_name is not None:
+                        invalid_entities.append(entity.pool)
+
+        if invalid_entities:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                {
+                    "message": MULTI_TEAM_ERROR_MESSAGE,
+                    "invalid_pool_names": invalid_entities,
+                },
+            )
+
     return BulkPoolService(session=session, request=request).handle_request()
