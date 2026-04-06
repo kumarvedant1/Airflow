@@ -1,0 +1,1 @@
+Required non-boolean parameters in auto-generated airflowctl commands are now positional instead of flag-style (e.g., ``airflowctl dags get example_dag`` instead of ``airflowctl dags get --dag-id=example_dag``).
