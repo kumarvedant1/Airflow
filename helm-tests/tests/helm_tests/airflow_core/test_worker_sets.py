@@ -2292,6 +2292,20 @@ class TestWorkerSets:
                     ],
                 },
             },
+            {
+                "celery": {
+                    "enableDefault": False,
+                    "extraContainers": [{"name": "test", "image": "test"}],
+                    "sets": [
+                        {
+                            "name": "set1",
+                            "extraContainers": [
+                                {"name": "{{ .Chart.Name }}", "image": "test-registry/test-repo:test-tag"}
+                            ],
+                        }
+                    ],
+                },
+            },
         ],
     )
     def test_overwrite_extra_containers(self, workers_values):
@@ -2302,13 +2316,13 @@ class TestWorkerSets:
             show_only=["templates/workers/worker-deployment.yaml"],
         )
 
-        containers = jmespath.search("spec.template.spec.containers", docs[0])
-
-        assert len(containers) == 3  # worker, worker-log-groomer, extra
-        assert containers[-1] == {
-            "name": "airflow",
-            "image": "test-registry/test-repo:test-tag",
-        }
+        # [2:] -> Skipping worker and worker-log-groomer containers
+        assert jmespath.search("spec.template.spec.containers[2:]", docs[0]) == [
+            {
+                "name": "airflow",
+                "image": "test-registry/test-repo:test-tag",
+            }
+        ]
 
     @pytest.mark.parametrize(
         "workers_values",
