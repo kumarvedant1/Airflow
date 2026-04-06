@@ -2419,7 +2419,7 @@
                     }
                 },
                 "schedulerName": {
-                    "description": "Specify kube scheduler name for Airflow Celery workers objects and pods created with pod-template-file.",
+                    "description": "Specify kube scheduler name for Airflow Celery workers objects and pods created with pod-template-file (deprecated, use ``workers.celery.schedulerName`` and/or ``workers.kubernetes.schedulerName`` instead).",
                     "type": [
                         "string",
                         "null"
@@ -3323,7 +3323,8 @@
                             "type": [
                                 "string",
                                 "null"
-                            ]
+                            ],
+                            "default": null
                         },
                         "hostAliases": {
                             "description": "Specify HostAliases for Airflow Celery worker pods.",
@@ -3346,6 +3347,15 @@
                                     ]
                                 }
                             ]
+                        },
+                        "schedulerName": {
+                            "description": "Specify kube scheduler name for Airflow Celery worker pods.",
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "default": null,
+                            "x-docsSection": "Common"
                         }
                     }
                 },
@@ -3681,6 +3691,15 @@
                                     ]
                                 }
                             ]
+                        },
+                        "schedulerName": {
+                            "description": "Specify kube scheduler name for pods created with pod-template-file.",
+                            "type": [
+                                "string",
+                                "null"
+                            ],
+                            "default": null,
+                            "x-docsSection": "Common"
                         }
                     }
                 }
