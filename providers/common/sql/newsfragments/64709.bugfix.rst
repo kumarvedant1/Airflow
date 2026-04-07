@@ -1,0 +1,1 @@
+Fixed long-running GenericTransfer tasks being incorrectly killed by the scheduler due to missing heartbeats during the paginated transfer loop. The operator now emits a heartbeat after each page to prevent false zombie detection on tasks running longer than ``task_instance_heartbeat_timeout``.
