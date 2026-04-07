@@ -19,10 +19,11 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query, status
 from sqlalchemy import select
 
 from airflow.api_fastapi.common.db.common import SessionDep
+from airflow.api_fastapi.common.exceptions import ExecutionHTTPException
 from airflow.api_fastapi.execution_api.datamodels.asset import AssetResponse
 from airflow.models.asset import AssetModel
 
@@ -60,10 +61,8 @@ def get_asset_by_uri(
 
 def _raise_if_not_found(asset, msg):
     if asset is None:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={
-                "reason": "not_found",
-                "message": msg,
-            },
+            reason="not_found",
+            message=msg,
         )

@@ -57,6 +57,18 @@ if TYPE_CHECKING:
 pytestmark = pytest.mark.db_test
 
 
+def assert_error_message(
+    response,
+    expected_message: str,
+    expected_reason: str | None = None,
+) -> None:
+    detail = response.json()["detail"]
+    assert detail["message"] == expected_message
+    assert "reason" in detail
+    if expected_reason is not None:
+        assert detail["reason"] == expected_reason
+
+
 class CustomTimetable(CronDataIntervalTimetable):
     """Custom timetable that generates custom run IDs."""
 
@@ -344,8 +356,9 @@ class TestGetDagRun:
     def test_get_dag_run_not_found(self, test_client):
         response = test_client.get(f"/dags/{DAG1_ID}/dagRuns/invalid")
         assert response.status_code == 404
-        body = response.json()
-        assert body["detail"] == "The DagRun with dag_id: `test_dag1` and run_id: `invalid` was not found"
+        assert_error_message(
+            response, "The DagRun with dag_id: `test_dag1` and run_id: `invalid` was not found"
+        )
 
     def test_should_respond_401(self, unauthenticated_test_client):
         response = unauthenticated_test_client.get(f"/dags/{DAG1_ID}/dagRuns/invalid")
@@ -377,16 +390,14 @@ class TestGetDagRuns:
     def test_get_dag_runs_not_found(self, test_client):
         response = test_client.get("/dags/invalid/dagRuns")
         assert response.status_code == 404
-        body = response.json()
-        assert body["detail"] == "The Dag with ID: `invalid` was not found"
+        assert_error_message(response, "The Dag with ID: `invalid` was not found")
 
     def test_invalid_order_by_raises_400(self, test_client):
         response = test_client.get("/dags/test_dag1/dagRuns?order_by=invalid")
         assert response.status_code == 400
-        body = response.json()
-        assert (
-            body["detail"]
-            == "Ordering with 'invalid' is disallowed or the attribute does not exist on the model"
+        assert_error_message(
+            response,
+            "Ordering with 'invalid' is disallowed or the attribute does not exist on the model",
         )
 
     def test_should_respond_401(self, unauthenticated_test_client):
@@ -858,8 +869,9 @@ class TestGetDagRuns:
     def test_invalid_state(self, test_client):
         response = test_client.get(f"/dags/{DAG1_ID}/dagRuns", params={"state": ["invalid"]})
         assert response.status_code == 422
-        assert (
-            response.json()["detail"] == f"Invalid value for state. Valid values are {', '.join(DagRunState)}"
+        assert_error_message(
+            response,
+            f"Invalid value for state. Valid values are {', '.join(DagRunState)}",
         )
 
     def test_invalid_dag_version(self, test_client):
@@ -923,10 +935,9 @@ class TestListDagRunsBatch:
     def test_invalid_order_by_raises_400(self, test_client):
         response = test_client.post("/dags/~/dagRuns/list", json={"order_by": "invalid"})
         assert response.status_code == 400
-        body = response.json()
-        assert (
-            body["detail"]
-            == "Ordering with 'invalid' is disallowed or the attribute does not exist on the model"
+        assert_error_message(
+            response,
+            "Ordering with 'invalid' is disallowed or the attribute does not exist on the model",
         )
 
     @pytest.mark.parametrize(
@@ -1337,8 +1348,9 @@ class TestPatchDagRun:
             json={"state": DagRunState.SUCCESS},
         )
         assert response.status_code == 404
-        body = response.json()
-        assert body["detail"] == "The DagRun with dag_id: `test_dag1` and run_id: `invalid` was not found"
+        assert_error_message(
+            response, "The DagRun with dag_id: `test_dag1` and run_id: `invalid` was not found"
+        )
 
     def test_patch_dag_run_bad_request(self, test_client):
         response = test_client.patch(f"/dags/{DAG1_ID}/dagRuns/{DAG1_RUN1_ID}", json={"state": "running"})
@@ -1374,8 +1386,9 @@ class TestDeleteDagRun:
     def test_delete_dag_run_not_found(self, test_client):
         response = test_client.delete(f"/dags/{DAG1_ID}/dagRuns/invalid")
         assert response.status_code == 404
-        body = response.json()
-        assert body["detail"] == "The DagRun with dag_id: `test_dag1` and run_id: `invalid` was not found"
+        assert_error_message(
+            response, "The DagRun with dag_id: `test_dag1` and run_id: `invalid` was not found"
+        )
 
     def test_delete_dag_run_in_running_state(self, test_client, dag_maker, session):
         with dag_maker(dag_id="test_running_dag"):
@@ -1388,10 +1401,10 @@ class TestDeleteDagRun:
         session.commit()
         response = test_client.delete("/dags/test_running_dag/dagRuns/test_running")
         assert response.status_code == 409
-        body = response.json()
-        assert body["detail"] == (
+        assert_error_message(
+            response,
             "The DagRun with dag_id: `test_running_dag` and run_id: `test_running` "
-            "cannot be deleted in running state"
+            "cannot be deleted in running state",
         )
 
     def test_should_respond_401(self, unauthenticated_test_client):
@@ -1497,9 +1510,9 @@ class TestGetDagRunAssetTriggerEvents:
             "/dags/invalid-id/dagRuns/invalid-run-id/upstreamAssetEvents",
         )
         assert response.status_code == 404
-        assert (
-            response.json()["detail"]
-            == "The DagRun with dag_id: `invalid-id` and run_id: `invalid-run-id` was not found"
+        assert_error_message(
+            response,
+            "The DagRun with dag_id: `invalid-id` and run_id: `invalid-run-id` was not found",
         )
 
 
@@ -1568,8 +1581,9 @@ class TestClearDagRun:
     def test_clear_dag_run_not_found(self, test_client):
         response = test_client.post(f"/dags/{DAG1_ID}/dagRuns/invalid/clear", json={"dry_run": False})
         assert response.status_code == 404
-        body = response.json()
-        assert body["detail"] == "The DagRun with dag_id: `test_dag1` and run_id: `invalid` was not found"
+        assert_error_message(
+            response, "The DagRun with dag_id: `test_dag1` and run_id: `invalid` was not found"
+        )
 
     def test_clear_dag_run_unprocessable_entity(self, test_client):
         response = test_client.post(f"/dags/{DAG1_ID}/dagRuns/{DAG1_RUN1_ID}/clear")
@@ -1842,23 +1856,23 @@ class TestTriggerDagRun:
 
         response = test_client.post(f"/dags/{DAG1_ID}/dagRuns", json={"logical_date": now})
         assert response.status_code == 400
-        assert response.json() == {"detail": error_message}
+        assert_error_message(response, error_message)
 
     def test_should_respond_404_if_a_dag_is_inactive(self, test_client, session, testing_dag_bundle):
         now = timezone.utcnow().isoformat()
         self._dags_for_trigger_tests(session)
         response = test_client.post("/dags/inactive/dagRuns", json={"logical_date": now})
         assert response.status_code == 404
-        assert response.json()["detail"] == "DAG with dag_id: 'inactive' not found"
+        assert_error_message(response, "DAG with dag_id: 'inactive' not found")
 
     def test_should_respond_400_if_a_dag_has_import_errors(self, test_client, session, testing_dag_bundle):
         now = timezone.utcnow().isoformat()
         self._dags_for_trigger_tests(session)
         response = test_client.post("/dags/import_errors/dagRuns", json={"logical_date": now})
         assert response.status_code == 400
-        assert (
-            response.json()["detail"]
-            == "DAG with dag_id: 'import_errors' has import errors and cannot be triggered"
+        assert_error_message(
+            response,
+            "DAG with dag_id: 'import_errors' has import errors and cannot be triggered",
         )
 
     def test_should_respond_400_if_manual_runs_denied(self, test_client, session, testing_dag_bundle):
@@ -1866,7 +1880,7 @@ class TestTriggerDagRun:
         self._dags_for_trigger_tests(session)
         response = test_client.post("/dags/allowed_scheduled/dagRuns", json={"logical_date": now})
         assert response.status_code == 400
-        assert response.json()["detail"] == "Dag with dag_id: 'allowed_scheduled' does not allow manual runs"
+        assert_error_message(response, "Dag with dag_id: 'allowed_scheduled' does not allow manual runs")
 
     @time_machine.travel(timezone.utcnow(), tick=False)
     @pytest.mark.usefixtures("configure_git_connection_for_dag_bundle")
@@ -1949,13 +1963,13 @@ class TestTriggerDagRun:
             json={"conf": {"validated_number": 5000}, "logical_date": now},
         )
         assert response.status_code == 400
-        assert "Invalid input for param validated_number" in response.json()["detail"]
+        assert "Invalid input for param validated_number" in response.json()["detail"]["message"]
 
     def test_response_404(self, test_client):
         now = timezone.utcnow().isoformat()
         response = test_client.post("/dags/randoms/dagRuns", json={"logical_date": now})
         assert response.status_code == 404
-        assert response.json()["detail"] == "DAG with dag_id: 'randoms' not found"
+        assert_error_message(response, "DAG with dag_id: 'randoms' not found")
 
     def test_response_409(self, test_client):
         now = timezone.utcnow().isoformat()

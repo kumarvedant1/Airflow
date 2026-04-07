@@ -20,11 +20,12 @@ from uuid import UUID
 
 import structlog
 from cadwyn import VersionedAPIRouter
-from fastapi import HTTPException, Security, status
+from fastapi import Security, status
 from sqlalchemy import select
 
 from airflow._shared.timezones import timezone
 from airflow.api_fastapi.common.db.common import SessionDep
+from airflow.api_fastapi.common.exceptions import ExecutionHTTPException
 from airflow.api_fastapi.execution_api.datamodels.hitl import (
     HITLDetailRequest,
     HITLDetailResponse,
@@ -95,15 +96,12 @@ def upsert_hitl_detail(
 
 def _check_hitl_detail_exists(hitl_detail_model: HITLDetail | None) -> HITLDetail:
     if not hitl_detail_model:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={
-                "reason": "not_found",
-                "message": (
-                    "HITLDetail not found. "
-                    "This happens most likely due to clearing task instance before receiving response."
-                ),
-            },
+            reason="not_found",
+            message=(
+                "HITLDetail not found. This happens most likely due to clearing task instance before receiving response."
+            ),
         )
 
     return hitl_detail_model
@@ -121,9 +119,10 @@ def update_hitl_detail(
     ).scalar()
     hitl_detail_model = _check_hitl_detail_exists(hitl_detail_model_result)
     if hitl_detail_model.response_received:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status.HTTP_409_CONFLICT,
-            f"Human-in-the-loop detail for Task Instance with id {task_instance_id} already exists.",
+            reason="already_exists",
+            message=f"Human-in-the-loop detail for Task Instance with id {task_instance_id} already exists.",
         )
 
     hitl_detail_model.responded_by = None

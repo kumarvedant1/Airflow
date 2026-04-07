@@ -158,7 +158,17 @@ class TestConfigEndpoint:
         if headers == HEADERS_TEXT:
             assert response.text == expected_response
         else:
-            assert response.json() == expected_response
+            body = response.json()
+            if (
+                isinstance(expected_response, dict)
+                and isinstance(body, dict)
+                and isinstance(expected_response.get("detail"), str)
+            ):
+                assert isinstance(body["detail"], dict)
+                assert body["detail"]["message"] == expected_response["detail"]
+                assert "reason" in body["detail"]
+            else:
+                assert body == expected_response
 
     @pytest.fixture(autouse=True)
     def setup(self) -> Generator[None, None, None]:

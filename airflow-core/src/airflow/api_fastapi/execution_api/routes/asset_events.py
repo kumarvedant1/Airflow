@@ -19,10 +19,11 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query, status
 from sqlalchemy import and_, select
 
 from airflow.api_fastapi.common.db.common import SessionDep
+from airflow.api_fastapi.common.exceptions import ExecutionHTTPException
 from airflow.api_fastapi.common.types import UtcDateTime
 from airflow.api_fastapi.execution_api.datamodels.asset import AssetResponse
 from airflow.api_fastapi.execution_api.datamodels.asset_event import (
@@ -90,12 +91,10 @@ def get_asset_event_by_asset_name_uri(
     elif name:
         where_clause = and_(AssetModel.name == name, AssetModel.active.has())
     else:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "reason": "Missing parameter",
-                "message": "name and uri cannot both be None",
-            },
+            reason="Missing parameter",
+            message="name and uri cannot both be None",
         )
 
     if after:

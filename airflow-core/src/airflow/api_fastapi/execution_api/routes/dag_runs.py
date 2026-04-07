@@ -21,13 +21,14 @@ import logging
 from typing import Annotated
 
 from cadwyn import VersionedAPIRouter
-from fastapi import HTTPException, Query, status
+from fastapi import Query, status
 from sqlalchemy import func, select
 from sqlalchemy.exc import NoResultFound
 
 from airflow.api.common.trigger_dag import trigger_dag
 from airflow.api_fastapi.common.dagbag import DagBagDep, get_dag_for_run
 from airflow.api_fastapi.common.db.common import SessionDep
+from airflow.api_fastapi.common.exceptions import ExecutionHTTPException
 from airflow.api_fastapi.common.types import UtcDateTime
 from airflow.api_fastapi.compat import HTTP_422_UNPROCESSABLE_CONTENT
 from airflow.api_fastapi.execution_api.datamodels.dagrun import DagRunStateResponse, TriggerDAGRunPayload
@@ -69,12 +70,10 @@ def get_dag_run(dag_id: str, run_id: str, session: SessionDep) -> DagRun:
     """Get detail of a Dag run."""
     dr = session.scalar(select(DagRunModel).where(DagRunModel.dag_id == dag_id, DagRunModel.run_id == run_id))
     if dr is None:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={
-                "reason": "not_found",
-                "message": f"Dag run with dag_id '{dag_id}' and run_id '{run_id}' was not found",
-            },
+            reason="not_found",
+            message=f"Dag run with dag_id '{dag_id}' and run_id '{run_id}' was not found",
         )
     return DagRun.model_validate(dr)
 
@@ -98,27 +97,26 @@ def trigger_dag_run(
     """Trigger a Dag run."""
     dm = session.scalar(select(DagModel).where(~DagModel.is_stale, DagModel.dag_id == dag_id).limit(1))
     if not dm:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={"reason": "not_found", "message": f"Dag with dag_id: '{dag_id}' not found"},
+            reason="not_found",
+            message=f"Dag with dag_id: '{dag_id}' not found",
         )
 
     if dm.has_import_errors:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status.HTTP_400_BAD_REQUEST,
-            detail={
-                "reason": "import_errors",
-                "message": f"Dag with dag_id '{dag_id}' has import errors and cannot be triggered",
-            },
+            reason="import_errors",
+            message=f"Dag with dag_id '{dag_id}' has import errors and cannot be triggered",
         )
 
+    # TODO: TriggerDagRunOperator also calls this route but creates OPERATOR_TRIGGERED runs.
+    #  Consider a dedicated run type for operator-triggered runs.
     if dm.allowed_run_types is not None and DagRunType.OPERATOR_TRIGGERED not in dm.allowed_run_types:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status.HTTP_400_BAD_REQUEST,
-            detail={
-                "reason": "denied_run_type",
-                "message": f"Dag with dag_id '{dag_id}' does not allow operator-triggered runs",
-            },
+            reason="denied_run_type",
+            message=f"Dag with dag_id '{dag_id}' does not allow operator-triggered runs",
         )
 
     try:
@@ -135,12 +133,10 @@ def trigger_dag_run(
             session=session,
         )
     except DagRunAlreadyExists:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status.HTTP_409_CONFLICT,
-            detail={
-                "reason": "already_exists",
-                "message": f"A run already exists for Dag '{dag_id}' with run_id '{run_id}'",
-            },
+            reason="already_exists",
+            message=f"A run already exists for Dag '{dag_id}' with run_id '{run_id}'",
         )
 
 
@@ -162,27 +158,27 @@ def clear_dag_run(
     """Clear a Dag run."""
     dm = session.scalar(select(DagModel).where(~DagModel.is_stale, DagModel.dag_id == dag_id).limit(1))
     if not dm:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={"reason": "not_found", "message": f"Dag with dag_id: '{dag_id}' not found"},
+            reason="not_found",
+            message=f"Dag with dag_id: '{dag_id}' not found",
         )
 
     if dm.has_import_errors:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status.HTTP_400_BAD_REQUEST,
-            detail={
-                "reason": "import_errors",
-                "message": f"Dag with dag_id '{dag_id}' has import errors and cannot be triggered",
-            },
+            reason="import_errors",
+            message=f"Dag with dag_id '{dag_id}' has import errors and cannot be triggered",
         )
 
     dag_run = session.scalar(
         select(DagRunModel).where(DagRunModel.dag_id == dag_id, DagRunModel.run_id == run_id)
     )
     if dag_run is None:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={"reason": "not_found", "message": f"Dag run with run_id: '{run_id}' not found"},
+            reason="not_found",
+            message=f"Dag run with run_id: '{run_id}' not found",
         )
     dag = get_dag_for_run(dag_bag, dag_run=dag_run, session=session)
 
@@ -204,12 +200,10 @@ def get_dagrun_state(
             select(DagRunModel.state).where(DagRunModel.dag_id == dag_id, DagRunModel.run_id == run_id)
         ).one()
     except NoResultFound:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={
-                "reason": "not_found",
-                "message": f"Dag run with dag_id '{dag_id}' and run_id '{run_id}' was not found",
-            },
+            reason="not_found",
+            message=f"Dag run with dag_id '{dag_id}' and run_id '{run_id}' was not found",
         )
     return DagRunStateResponse(state=state)
 

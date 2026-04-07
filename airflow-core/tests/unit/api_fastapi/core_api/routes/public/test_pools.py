@@ -47,6 +47,15 @@ POOL3_INCLUDE_DEFERRED = False
 POOL3_DESCRIPTION = "Some Description"
 
 
+def assert_error_message(response, expected_message: str, expected_reason: str | None = None) -> None:
+    detail = response.json()["detail"]
+    assert isinstance(detail, dict)
+    assert detail["message"] == expected_message
+    assert "reason" in detail
+    if expected_reason is not None:
+        assert detail["reason"] == expected_reason
+
+
 @provide_session
 def _create_pools(session) -> None:
     pool1 = Pool(pool=POOL1_NAME, slots=POOL1_SLOT, include_deferred=POOL1_INCLUDE_DEFERRED, team_name="test")
@@ -102,14 +111,12 @@ class TestDeletePool(TestPoolsEndpoint):
     def test_delete_should_respond_400(self, test_client):
         response = test_client.delete("/pools/default_pool")
         assert response.status_code == 400
-        body = response.json()
-        assert body["detail"] == "Default Pool can't be deleted"
+        assert_error_message(response, "Default Pool can't be deleted")
 
     def test_delete_should_respond_404(self, test_client):
         response = test_client.delete(f"/pools/{POOL1_NAME}")
         assert response.status_code == 404
-        body = response.json()
-        assert f"The Pool with name: `{POOL1_NAME}` was not found" == body["detail"]
+        assert_error_message(response, f"The Pool with name: `{POOL1_NAME}` was not found")
 
     def test_delete_pool3_should_respond_204(self, test_client, session):
         """Test deleting POOL3 with forward slash in name"""
@@ -153,8 +160,7 @@ class TestGetPool(TestPoolsEndpoint):
     def test_get_should_respond_404(self, test_client):
         response = test_client.get(f"/pools/{POOL1_NAME}")
         assert response.status_code == 404
-        body = response.json()
-        assert f"The Pool with name: `{POOL1_NAME}` was not found" == body["detail"]
+        assert_error_message(response, f"The Pool with name: `{POOL1_NAME}` was not found")
 
     def test_get_pool3_should_respond_200(self, test_client, session):
         """Test getting POOL3 with forward slash in name"""
@@ -377,7 +383,10 @@ class TestPatchPool(TestPoolsEndpoint):
             assert "slots" in str(detail)
             return
 
-        assert body == expected_response
+        if isinstance(expected_response, dict) and isinstance(expected_response.get("detail"), str):
+            assert_error_message(response, expected_response["detail"])
+        else:
+            assert body == expected_response
         if response.status_code == 200:
             check_last_log(session, dag_id=None, event="patch_pool", logical_date=None)
 

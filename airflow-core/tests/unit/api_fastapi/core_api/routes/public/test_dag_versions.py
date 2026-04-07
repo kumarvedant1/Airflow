@@ -28,6 +28,15 @@ from tests_common.test_utils.db import clear_db_dag_bundles, clear_db_dags, clea
 pytestmark = pytest.mark.db_test
 
 
+def assert_error_message(response, expected_message: str, expected_reason: str | None = None) -> None:
+    detail = response.json()["detail"]
+    assert isinstance(detail, dict)
+    assert detail["message"] == expected_message
+    assert "reason" in detail
+    if expected_reason is not None:
+        assert detail["reason"] == expected_reason
+
+
 class TestDagVersionEndpoint:
     @pytest.fixture(autouse=True)
     def setup(request, dag_maker, session):
@@ -196,9 +205,10 @@ class TestGetDagVersion(TestDagVersionEndpoint):
     def test_get_dag_version_404(self, test_client):
         response = test_client.get("/dags/dag_with_multiple_versions/dagVersions/99")
         assert response.status_code == 404
-        assert response.json() == {
-            "detail": "The DagVersion with dag_id: `dag_with_multiple_versions` and version_number: `99` was not found",
-        }
+        assert_error_message(
+            response,
+            "The DagVersion with dag_id: `dag_with_multiple_versions` and version_number: `99` was not found",
+        )
 
     def test_should_respond_401(self, unauthenticated_test_client):
         response = unauthenticated_test_client.get(
@@ -521,9 +531,7 @@ class TestGetDagVersions(TestDagVersionEndpoint):
     def test_get_dag_versions_should_return_404_for_missing_dag(self, test_client):
         response = test_client.get("/dags/MISSING_ID/dagVersions")
         assert response.status_code == 404
-        assert response.json() == {
-            "detail": "The Dag with ID: `MISSING_ID` was not found",
-        }
+        assert_error_message(response, "The Dag with ID: `MISSING_ID` was not found")
 
     def test_should_respond_401(self, unauthenticated_test_client):
         response = unauthenticated_test_client.get("/dags/~/dagVersions", params={})

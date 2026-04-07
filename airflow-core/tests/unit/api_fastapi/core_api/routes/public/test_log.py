@@ -40,6 +40,18 @@ from tests_common.test_utils.file_task_handler import convert_list_to_stream
 pytestmark = [pytest.mark.db_test, pytest.mark.need_serialized_dag]
 
 
+def assert_error_message(
+    response,
+    expected_message: str,
+    expected_reason: str | None = None,
+) -> None:
+    detail = response.json()["detail"]
+    assert detail["message"] == expected_message
+    assert "reason" in detail
+    if expected_reason is not None:
+        assert detail["reason"] == expected_reason
+
+
 class TestTaskInstancesLog:
     DAG_ID = "dag_for_testing_log_endpoint"
     RUN_ID = "dag_run_id_for_testing_log_endpoint"
@@ -302,7 +314,7 @@ class TestTaskInstancesLog:
             params={"token": token},
         )
         assert response.status_code == 404
-        assert response.json() == {"detail": "TaskInstance not found"}
+        assert_error_message(response, "TaskInstance not found")
 
     @pytest.mark.parametrize("try_number", [1, 2])
     def test_get_logs_with_metadata_as_download_large_file(self, try_number):
@@ -362,7 +374,7 @@ class TestTaskInstancesLog:
             headers={"Accept": "application/json"},
         )
         # assert response.status_code == 400
-        assert response.json() == {"detail": "Bad Signature. Please use only the tokens provided by the API."}
+        assert_error_message(response, "Bad Signature. Please use only the tokens provided by the API.")
 
     def test_should_raises_401_unauthenticated(self, unauthenticated_test_client):
         response = unauthenticated_test_client.get(
@@ -385,7 +397,7 @@ class TestTaskInstancesLog:
             headers={"Accept": "application/json"},
         )
         assert response.status_code == 404
-        assert response.json() == {"detail": "TaskInstance not found"}
+        assert_error_message(response, "TaskInstance not found")
 
     def test_should_raise_404_when_missing_map_index_param_for_mapped_task(self):
         key = self.app.state.secret_key
@@ -398,7 +410,7 @@ class TestTaskInstancesLog:
             headers={"Accept": "application/x-ndjson"},
         )
         assert response.status_code == 404
-        assert response.json()["detail"] == "TaskInstance not found"
+        assert_error_message(response, "TaskInstance not found")
 
     def test_should_raise_404_when_filtering_on_map_index_for_unmapped_task(self):
         key = self.app.state.secret_key
@@ -411,26 +423,35 @@ class TestTaskInstancesLog:
             headers={"Accept": "application/x-ndjson"},
         )
         assert response.status_code == 404
-        assert response.json()["detail"] == "TaskInstance not found"
+        assert_error_message(response, "TaskInstance not found")
 
     @pytest.mark.parametrize(
-        ("supports_external_link", "task_id", "expected_status", "expected_response", "mock_external_url"),
+        (
+            "supports_external_link",
+            "task_id",
+            "expected_status",
+            "expected_response",
+            "expected_error_message",
+            "mock_external_url",
+        ),
         [
             (
                 True,
                 "task_for_testing_log_endpoint",
                 200,
                 {"url": "https://external-logs.example.com/log/123"},
+                None,
                 True,
             ),
             (
                 False,
                 "task_for_testing_log_endpoint",
                 400,
-                {"detail": "Task log handler does not support external logs."},
+                None,
+                "Task log handler does not support external logs.",
                 False,
             ),
-            (True, "INVALID_TASK", 404, {"detail": "TaskInstance not found"}, False),
+            (True, "INVALID_TASK", 404, None, "TaskInstance not found", False),
         ],
         ids=[
             "external_links_supported_task_exists",
@@ -439,7 +460,13 @@ class TestTaskInstancesLog:
         ],
     )
     def test_get_external_log_url(
-        self, supports_external_link, task_id, expected_status, expected_response, mock_external_url
+        self,
+        supports_external_link,
+        task_id,
+        expected_status,
+        expected_response,
+        expected_error_message,
+        mock_external_url,
     ):
         with (
             mock.patch(
@@ -463,4 +490,7 @@ class TestTaskInstancesLog:
                 mock_log_handler.get_external_log_url.assert_not_called()
 
             assert response.status_code == expected_status
-            assert response.json() == expected_response
+            if expected_error_message is None:
+                assert response.json() == expected_response
+            else:
+                assert_error_message(response, expected_error_message)

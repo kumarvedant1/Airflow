@@ -47,6 +47,19 @@ if TYPE_CHECKING:
 
 pytestmark = pytest.mark.db_test
 
+
+def assert_error_message(
+    response,
+    expected_message: str,
+    expected_reason: str | None = None,
+) -> None:
+    detail = response.json()["detail"]
+    assert detail["message"] == expected_message
+    assert "reason" in detail
+    if expected_reason is not None:
+        assert detail["reason"] == expected_reason
+
+
 DAG_ID = "test_hitl_dag"
 ANOTHER_DAG_ID = "another_hitl_dag"
 TASK_ID = "sample_task_hitl"
@@ -408,7 +421,7 @@ class TestUpdateHITLDetailEndpoint:
             json={"chosen_options": ["Approve"], "params_input": {"input_1": 2}},
         )
         assert response.status_code == 404
-        assert response.json() == {"detail": expected_ti_not_found_error_msg}
+        assert_error_message(response, expected_ti_not_found_error_msg)
 
     def test_should_respond_404_without_hitl_detail(
         self,
@@ -423,7 +436,7 @@ class TestUpdateHITLDetailEndpoint:
         )
 
         assert response.status_code == 404
-        assert response.json() == {"detail": expected_hitl_detail_not_found_error_msg}
+        assert_error_message(response, expected_hitl_detail_not_found_error_msg)
 
     @time_machine.travel(datetime(2025, 7, 3, 0, 0, 0), tick=False)
     @pytest.mark.usefixtures("sample_hitl_detail")
@@ -452,13 +465,12 @@ class TestUpdateHITLDetailEndpoint:
             json={"chosen_options": ["Approve"], "params_input": {"input_1": 3}},
         )
         assert response.status_code == 409
-        assert response.json() == {
-            "detail": (
-                "Human-in-the-loop detail has already been updated for Task Instance "
-                f"with id {sample_ti.id} "
-                "and is not allowed to write again."
-            )
-        }
+        assert_error_message(
+            response,
+            "Human-in-the-loop detail has already been updated for Task Instance "
+            f"with id {sample_ti.id} "
+            "and is not allowed to write again.",
+        )
 
     @pytest.mark.usefixtures("sample_hitl_detail")
     def test_should_respond_422_with_empty_option(
@@ -509,7 +521,7 @@ class TestGetHITLDetailEndpoint:
     ) -> None:
         response = test_client.get(f"{sample_ti_url_identifier}/hitlDetails")
         assert response.status_code == 404
-        assert response.json() == {"detail": expected_ti_not_found_error_msg}
+        assert_error_message(response, expected_ti_not_found_error_msg)
 
     def test_should_respond_404_without_hitl_detail(
         self,
@@ -519,7 +531,7 @@ class TestGetHITLDetailEndpoint:
     ) -> None:
         response = test_client.get(f"{sample_ti_url_identifier}/hitlDetails")
         assert response.status_code == 404
-        assert response.json() == {"detail": expected_hitl_detail_not_found_error_msg}
+        assert_error_message(response, expected_hitl_detail_not_found_error_msg)
 
 
 class TestGetHITLDetailsEndpoint:

@@ -37,6 +37,19 @@ if TYPE_CHECKING:
 
 pytestmark = pytest.mark.db_test
 
+
+def assert_error_message(
+    response,
+    expected_message: str,
+    expected_reason: str | None = None,
+) -> None:
+    detail = response.json()["detail"]
+    assert detail["message"] == expected_message
+    assert "reason" in detail
+    if expected_reason is not None:
+        assert detail["reason"] == expected_reason
+
+
 FILENAME1 = "test_filename1.py"
 FILENAME2 = "test_filename2.py"
 FILENAME3 = "Lorem_ipsum.py"
@@ -249,7 +262,7 @@ class TestGetImportError:
         # Assert
         mock_get_authorized_dag_ids.assert_called_once_with(user=mock.ANY)
         assert response.status_code == 403
-        assert response.json() == {"detail": "You do not have read permission on any of the DAGs in the file"}
+        assert_error_message(response, "You do not have read permission on any of the DAGs in the file")
 
     @mock.patch("airflow.api_fastapi.core_api.routes.public.import_error.get_auth_manager")
     def test_get_import_error__user_dont_have_read_permission_to_read_all_dags_in_file(

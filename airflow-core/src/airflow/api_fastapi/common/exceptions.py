@@ -21,9 +21,10 @@ import logging
 import traceback
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
-from fastapi import HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
 
 from airflow.configuration import conf
@@ -122,4 +123,101 @@ class DagErrorHandler(BaseErrorHandler[DeserializationError]):
         )
 
 
+class ExecutionHTTPException(HTTPException):
+    """
+    HTTPException subclass used by Execution API.
+
+    Enforces consistent error response format containing `reason` and `message` keys.
+    """
+
+    def __init__(
+        self,
+        status_code: int,
+        *,
+        reason: str,
+        message: str,
+        extra: dict[str, Any] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        """
+        Initialize with explicit reason/message and optional extra fields.
+
+        detail will be constructed as a dict: {"reason": reason, "message": message, **extra}
+        """
+        detail: dict[str, Any] = {"reason": reason, "message": message}
+        if extra:
+            # Do not allow overriding reason/message through extra accidentally.
+            for k, v in extra.items():
+                if k not in ("reason", "message"):
+                    detail[k] = v
+        super().__init__(status_code=status_code, detail=detail, headers=headers)
+
+
 ERROR_HANDLERS: list[BaseErrorHandler] = [_UniqueConstraintErrorHandler(), DagErrorHandler()]
+
+
+# --------------------
+# Global exception normalization utilities and registration
+# --------------------
+
+
+def _ensure_detail_dict(detail: dict[str, Any] | str | None) -> dict[str, Any]:
+    """Normalize detail into a dict with at least reason/message keys."""
+    if isinstance(detail, str) or detail is None:
+        return {"reason": "error", "message": detail or "An error occurred"}
+    if isinstance(detail, dict):
+        # Flatten legacy/nested payloads: {"detail": "..."} -> {"reason": "error", "message": "..."}
+        if set(detail.keys()) == {"detail"}:
+            nested_detail = detail["detail"]
+            if isinstance(nested_detail, dict):
+                normalized = dict(nested_detail)
+                normalized.setdefault("reason", "error")
+                normalized.setdefault("message", "An error occurred")
+                return normalized
+            return {"reason": "error", "message": str(nested_detail)}
+
+        # Idempotent path: keep already structured details intact.
+        normalized = dict(detail)
+        normalized.setdefault("reason", "error")
+        normalized.setdefault("message", "An error occurred")
+        return normalized
+    return {"reason": "error", "message": str(detail)}
+
+
+def register_exception_handlers(app: FastAPI) -> None:
+    """
+    Register global and specific exception handlers on the FastAPI app.
+
+    Guarantees JSON error responses carry a `detail` object with `reason` and `message`.
+    """
+    # Specific handlers remain in place (e.g., DB unique constraint, Dag errors)
+    for handler in ERROR_HANDLERS:
+        app.add_exception_handler(handler.exception_cls, handler.exception_handler)  # type: ignore[arg-type]
+
+    # Normalize any HTTPException to have dict detail with reason/message
+    @app.exception_handler(HTTPException)
+    async def _http_exception_handler(request: Request, exc: HTTPException):
+        detail = _ensure_detail_dict(getattr(exc, "detail", None))
+        headers = getattr(exc, "headers", None)
+        return JSONResponse(status_code=exc.status_code, content={"detail": detail}, headers=headers)
+
+    # Catch-all for unhandled Exceptions
+    @app.exception_handler(Exception)
+    async def _unhandled_exception_handler(request: Request, exc: Exception):
+        exception_id = get_random_string()
+        log.exception("Unhandled error id %s while handling request %s", exception_id, request.url.path)
+
+        if conf.get("api", "expose_stacktrace") == "True":
+            message = f"Unhandled error id {exception_id}: {exc}"
+        else:
+            message = (
+                "Serious error when handling your request. Check logs for more details - "
+                f"you will find it in api server when you look for ID {exception_id}"
+            )
+
+        detail = {
+            "reason": "unhandled_error",
+            "message": message,
+            "error_id": exception_id,
+        }
+        return JSONResponse(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, content={"detail": detail})

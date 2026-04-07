@@ -61,6 +61,18 @@ DEFAULT_DATE = timezone.datetime(2020, 6, 11, 18, 0, 0)
 pytestmark = pytest.mark.db_test
 
 
+def assert_error_message(
+    response,
+    expected_message: str,
+    expected_reason: str | None = None,
+) -> None:
+    detail = response.json()["detail"]
+    assert detail["message"] == expected_message
+    assert "reason" in detail
+    if expected_reason is not None:
+        assert detail["reason"] == expected_reason
+
+
 def _create_assets(session, num: int = 2) -> list[AssetModel]:
     assets = [
         AssetModel(
@@ -491,7 +503,7 @@ class TestGetAssets(TestAssets):
 
         assert response.status_code == 400
         msg = "Ordering with 'fake' is disallowed or the attribute does not exist on the model"
-        assert response.json()["detail"] == msg
+        assert_error_message(response, msg)
 
     @pytest.mark.parametrize(
         ("params", "expected_assets"),
@@ -721,7 +733,7 @@ class TestGetAssetAliases(TestAssetAliases):
 
         assert response.status_code == 400
         msg = "Ordering with 'fake' is disallowed or the attribute does not exist on the model"
-        assert response.json()["detail"] == msg
+        assert_error_message(response, msg)
 
     @pytest.mark.parametrize(
         ("params", "expected_asset_aliases"),
@@ -944,7 +956,7 @@ class TestGetAssetEvents(TestAssets):
 
         assert response.status_code == 400
         msg = "Ordering with 'fake' is disallowed or the attribute does not exist on the model"
-        assert response.json()["detail"] == msg
+        assert_error_message(response, msg)
 
     @pytest.mark.parametrize(
         ("params", "expected_asset_ids"),
@@ -1111,7 +1123,7 @@ class TestGetAssetEndpoint(TestAssets):
     def test_should_respond_404(self, test_client):
         response = test_client.get("/assets/1")
         assert response.status_code == 404
-        assert response.json()["detail"] == "The Asset with ID: `1` was not found"
+        assert_error_message(response, "The Asset with ID: `1` was not found")
 
     @pytest.mark.usefixtures("time_freezer")
     @pytest.mark.enable_redact
@@ -1150,7 +1162,7 @@ class TestGetAssetAliasEndpoint(TestAssetAliases):
     def test_should_respond_404(self, test_client):
         response = test_client.get("/assets/aliases/1")
         assert response.status_code == 404
-        assert response.json()["detail"] == "The Asset Alias with ID: `1` was not found"
+        assert_error_message(response, "The Asset Alias with ID: `1` was not found")
 
 
 class TestQueuedEventEndpoint(TestAssets):
@@ -1244,7 +1256,7 @@ class TestDeleteDagDatasetQueuedEvents(TestQueuedEventEndpoint):
         )
 
         assert response.status_code == 404
-        assert response.json()["detail"] == "Queue event with dag_id: `not_exists` was not found"
+        assert_error_message(response, "Queue event with dag_id: `not_exists` was not found")
 
     def test_should_respond_404_valid_dag_no_adrq(self, test_client, session, create_dummy_dag):
         dag, _ = create_dummy_dag()
@@ -1258,7 +1270,7 @@ class TestDeleteDagDatasetQueuedEvents(TestQueuedEventEndpoint):
         )
 
         assert response.status_code == 404
-        assert response.json()["detail"] == "Queue event with dag_id: `dag` was not found"
+        assert_error_message(response, "Queue event with dag_id: `dag` was not found")
 
 
 class TestPostAssetEvents(TestAssets):
@@ -1472,12 +1484,12 @@ class TestPostAssetMaterialize(TestAssets):
     def test_should_respond_409_on_multiple_dags(self, test_client):
         response = test_client.post("/assets/2/materialize")
         assert response.status_code == 409
-        assert response.json()["detail"] == "More than one DAG materializes asset with ID: 2"
+        assert_error_message(response, "More than one DAG materializes asset with ID: 2")
 
     def test_should_respond_404_on_multiple_dags(self, test_client):
         response = test_client.post("/assets/3/materialize")
         assert response.status_code == 404
-        assert response.json()["detail"] == "No DAG materializes asset with ID: 3"
+        assert_error_message(response, "No DAG materializes asset with ID: 3")
 
     def test_should_respond_400_if_materialization_runs_denied(self, test_client, session):
         sdm = session.scalar(
@@ -1493,9 +1505,9 @@ class TestPostAssetMaterialize(TestAssets):
         session.commit()
         response = test_client.post("/assets/1/materialize")
         assert response.status_code == 400
-        assert (
-            response.json()["detail"]
-            == f"Dag with dag_id: '{self.DAG_ASSET1_ID}' does not allow asset materialization runs"
+        assert_error_message(
+            response,
+            f"Dag with dag_id: '{self.DAG_ASSET1_ID}' does not allow asset materialization runs",
         )
 
     @pytest.mark.usefixtures("configure_git_connection_for_dag_bundle")
@@ -1509,8 +1521,9 @@ class TestPostAssetMaterialize(TestAssets):
             response = test_client.post("/assets/1/materialize")
 
             assert response.status_code == 403
-            assert response.json()["detail"] == (
-                f"User is not authorized to trigger a run for DAG: {self.DAG_ASSET1_ID} that materializes this asset"
+            assert_error_message(
+                response,
+                f"User is not authorized to trigger a run for DAG: {self.DAG_ASSET1_ID} that materializes this asset",
             )
             mock_get_auth_manager.return_value.is_authorized_dag.assert_called_once_with(
                 method="POST",
@@ -1583,7 +1596,7 @@ class TestDeleteAssetQueuedEvents(TestQueuedEventEndpoint):
     def test_should_respond_404(self, test_client):
         response = test_client.delete("/assets/1/queuedEvents")
         assert response.status_code == 404
-        assert response.json()["detail"] == "Queue event with asset_id: `1` was not found"
+        assert_error_message(response, "Queue event with asset_id: `1` was not found")
 
 
 class TestDeleteDagAssetQueuedEvent(TestQueuedEventEndpoint):
@@ -1622,7 +1635,6 @@ class TestDeleteDagAssetQueuedEvent(TestQueuedEventEndpoint):
         )
 
         assert response.status_code == 404
-        assert (
-            response.json()["detail"]
-            == "Queued event with dag_id: `not_exists` and asset_id: `1` was not found"
+        assert_error_message(
+            response, "Queued event with dag_id: `not_exists` and asset_id: `1` was not found"
         )

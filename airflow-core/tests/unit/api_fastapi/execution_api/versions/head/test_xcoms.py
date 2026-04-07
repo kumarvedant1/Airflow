@@ -126,11 +126,8 @@ class TestXComsGetEndpoint:
             response = client.get("/execution/xcoms/dag/runid/task/xcom_perms")
 
         assert response.status_code == 403, response.json()
-        assert response.json() == {
-            "detail": {
-                "reason": "access_denied",
-            }
-        }
+        assert response.json()["detail"]["reason"] == "access_denied"
+        assert "message" in response.json()["detail"]
         assert any(msg.startswith("Checking read XCom access") for msg in caplog.messages)
 
     @pytest.mark.parametrize(
@@ -512,11 +509,8 @@ class TestXComsSetEndpoint:
             )
 
         assert response.status_code == 403
-        assert response.json() == {
-            "detail": {
-                "reason": "access_denied",
-            }
-        }
+        assert response.json()["detail"]["reason"] == "access_denied"
+        assert "message" in response.json()["detail"]
         assert any(msg.startswith("Checking write XCom access") for msg in caplog.messages)
 
     @pytest.mark.parametrize(

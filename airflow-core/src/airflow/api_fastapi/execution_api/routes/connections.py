@@ -20,8 +20,9 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, status
+from fastapi import APIRouter, Depends, Path, status
 
+from airflow.api_fastapi.common.exceptions import ExecutionHTTPException
 from airflow.api_fastapi.execution_api.datamodels.connection import ConnectionResponse
 from airflow.api_fastapi.execution_api.security import CurrentTIToken, get_team_name_dep
 from airflow.exceptions import AirflowNotFoundException
@@ -66,11 +67,9 @@ def get_connection(
     try:
         connection = Connection.get_connection_from_secrets(connection_id, team_name=team_name)
     except AirflowNotFoundException:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={
-                "reason": "not_found",
-                "message": f"Connection with ID {connection_id} not found",
-            },
+            reason="not_found",
+            message=f"Connection with ID {connection_id} not found",
         )
     return ConnectionResponse.model_validate(connection)

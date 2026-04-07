@@ -61,6 +61,15 @@ TEST_CONN_ID_3 = "test_connection_id_3"
 TEST_CONN_TYPE_3 = "test_type_3"
 
 
+def assert_error_message(response, expected_message: str, expected_reason: str | None = None) -> None:
+    detail = response.json()["detail"]
+    assert isinstance(detail, dict)
+    assert detail["message"] == expected_message
+    assert "reason" in detail
+    if expected_reason is not None:
+        assert detail["reason"] == expected_reason
+
+
 @provide_session
 def _create_connection(team_name: str | None = None, session: Session = NEW_SESSION) -> None:
     connection_model = Connection(
@@ -128,8 +137,7 @@ class TestDeleteConnection(TestConnectionEndpoint):
     def test_delete_should_respond_404(self, test_client):
         response = test_client.delete(f"/connections/{TEST_CONN_ID}")
         assert response.status_code == 404
-        body = response.json()
-        assert f"The Connection with connection_id: `{TEST_CONN_ID}` was not found" == body["detail"]
+        assert_error_message(response, f"The Connection with connection_id: `{TEST_CONN_ID}` was not found")
 
 
 class TestGetConnection(TestConnectionEndpoint):
@@ -153,8 +161,7 @@ class TestGetConnection(TestConnectionEndpoint):
     def test_get_should_respond_404(self, test_client):
         response = test_client.get(f"/connections/{TEST_CONN_ID}")
         assert response.status_code == 404
-        body = response.json()
-        assert f"The Connection with connection_id: `{TEST_CONN_ID}` was not found" == body["detail"]
+        assert_error_message(response, f"The Connection with connection_id: `{TEST_CONN_ID}` was not found")
 
     def test_get_should_respond_200_with_extra(self, test_client, session):
         self.create_connection()
@@ -826,9 +833,9 @@ class TestPatchConnection(TestConnectionEndpoint):
         self.create_connection()
         response = test_client.patch(f"/connections/{TEST_CONN_ID}", json=body)
         assert response.status_code == 400
-        assert response.json() == {
-            "detail": "The connection_id in the request body does not match the URL parameter",
-        }
+        assert_error_message(
+            response, "The connection_id in the request body does not match the URL parameter"
+        )
 
     @pytest.mark.parametrize(
         "body",
@@ -866,9 +873,10 @@ class TestPatchConnection(TestConnectionEndpoint):
     def test_patch_should_respond_404(self, test_client, body):
         response = test_client.patch(f"/connections/{body['connection_id']}", json=body)
         assert response.status_code == 404
-        assert response.json() == {
-            "detail": f"The Connection with connection_id: `{body['connection_id']}` was not found",
-        }
+        assert_error_message(
+            response,
+            f"The Connection with connection_id: `{body['connection_id']}` was not found",
+        )
 
     @pytest.mark.enable_redact
     @pytest.mark.parametrize(
@@ -1028,10 +1036,10 @@ class TestConnection(TestConnectionEndpoint):
     def test_should_respond_403_by_default(self, test_client, body):
         response = test_client.post("/connections/test", json=body)
         assert response.status_code == 403
-        assert response.json() == {
-            "detail": "Testing connections is disabled in Airflow configuration. "
-            "Contact your deployment admin to enable it."
-        }
+        assert_error_message(
+            response,
+            "Testing connections is disabled in Airflow configuration. Contact your deployment admin to enable it.",
+        )
 
     @mock.patch.dict(os.environ, {"AIRFLOW__CORE__TEST_CONNECTION": "Enabled"})
     def test_should_merge_password_with_existing_connection(self, test_client, session):

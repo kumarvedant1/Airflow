@@ -121,11 +121,8 @@ class TestGetVariable:
 
         # Assert response status code and detail for access denied
         assert response.status_code == 403
-        assert response.json() == {
-            "detail": {
-                "reason": "access_denied",
-            }
-        }
+        assert response.json()["detail"]["reason"] == "access_denied"
+        assert "message" in response.json()["detail"]
 
         assert any(msg.startswith("Checking read access for task instance") for msg in caplog.messages)
 
@@ -236,11 +233,8 @@ class TestPutVariable:
 
         # Assert response status code and detail for access denied
         assert response.status_code == 403
-        assert response.json() == {
-            "detail": {
-                "reason": "access_denied",
-            }
-        }
+        assert response.json()["detail"]["reason"] == "access_denied"
+        assert "message" in response.json()["detail"]
         assert any(msg.startswith("Checking write access for task instance") for msg in caplog.messages)
 
 

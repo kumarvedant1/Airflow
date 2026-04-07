@@ -71,6 +71,19 @@ DEFAULT_DATETIME_1 = dt.datetime.fromisoformat(DEFAULT_DATETIME_STR_1)
 DEFAULT_DATETIME_2 = dt.datetime.fromisoformat(DEFAULT_DATETIME_STR_2)
 
 
+def assert_error_message(response, expected_message: str, expected_reason: str | None = None) -> None:
+    detail = response.json()["detail"]
+    assert isinstance(detail, dict)
+    actual_message = detail["message"]
+    normalized_message = actual_message
+    if normalized_message.startswith("('") and normalized_message.endswith("',)"):
+        normalized_message = normalized_message[2:-3]
+    assert normalized_message == expected_message
+    assert "reason" in detail
+    if expected_reason is not None:
+        assert detail["reason"] == expected_reason
+
+
 class TestTaskInstanceEndpoint:
     @staticmethod
     def clear_db():
@@ -522,9 +535,10 @@ class TestGetTaskInstance(TestTaskInstanceEndpoint):
             "/dags/example_python_operator/dagRuns/TEST_DAG_RUN_ID/taskInstances/print_the_context"
         )
         assert response.status_code == 404
-        assert response.json() == {
-            "detail": "The Task Instance with dag_id: `example_python_operator`, run_id: `TEST_DAG_RUN_ID` and task_id: `print_the_context` was not found"
-        }
+        assert_error_message(
+            response,
+            "The Task Instance with dag_id: `example_python_operator`, run_id: `TEST_DAG_RUN_ID` and task_id: `print_the_context` was not found",
+        )
 
     def test_raises_404_for_mapped_task_instance_with_multiple_indexes(self, test_client, session):
         tis = self.create_task_instances(session)
@@ -545,7 +559,7 @@ class TestGetTaskInstance(TestTaskInstanceEndpoint):
             "/dags/example_python_operator/dagRuns/TEST_DAG_RUN_ID/taskInstances/print_the_context"
         )
         assert response.status_code == 404
-        assert response.json() == {"detail": "Task instance is mapped, add the map_index value to the URL"}
+        assert_error_message(response, "Task instance is mapped, add the map_index value to the URL")
 
     def test_raises_404_for_mapped_task_instance_with_one_index(self, test_client, session):
         tis = self.create_task_instances(session)
@@ -565,7 +579,7 @@ class TestGetTaskInstance(TestTaskInstanceEndpoint):
             "/dags/example_python_operator/dagRuns/TEST_DAG_RUN_ID/taskInstances/print_the_context"
         )
         assert response.status_code == 404
-        assert response.json() == {"detail": "Task instance is mapped, add the map_index value to the URL"}
+        assert_error_message(response, "Task instance is mapped, add the map_index value to the URL")
 
 
 class TestGetMappedTaskInstance(TestTaskInstanceEndpoint):
@@ -656,10 +670,10 @@ class TestGetMappedTaskInstance(TestTaskInstanceEndpoint):
             "/dags/example_python_operator/dagRuns/TEST_DAG_RUN_ID/taskInstances/print_the_context/10",
         )
         assert response.status_code == 404
-
-        assert response.json() == {
-            "detail": "The Mapped Task Instance with dag_id: `example_python_operator`, run_id: `TEST_DAG_RUN_ID`, task_id: `print_the_context`, and map_index: `10` was not found"
-        }
+        assert_error_message(
+            response,
+            "The Mapped Task Instance with dag_id: `example_python_operator`, run_id: `TEST_DAG_RUN_ID`, task_id: `print_the_context`, and map_index: `10` was not found",
+        )
 
 
 class TestGetMappedTaskInstances:
@@ -811,7 +825,7 @@ class TestGetMappedTaskInstances:
             "/dags/mapped_tis/dagRuns/run_mapped_tis/taskInstances/task_2/listMapped",
         )
         assert response.status_code == 404
-        assert response.json() == {"detail": "The Dag with ID: `mapped_tis` was not found"}
+        assert_error_message(response, "The Dag with ID: `mapped_tis` was not found")
 
     def test_should_respond_200(self, one_task_with_many_mapped_tis, test_client):
         with assert_queries_count(4):
@@ -988,7 +1002,7 @@ class TestGetMappedTaskInstances:
             "/dags/mapped_tis/dagRuns/run_mapped_tis/taskInstances/nonexistent_task/listMapped",
         )
         assert response.status_code == 404
-        assert response.json()["detail"] == "Task id nonexistent_task not found"
+        assert_error_message(response, "Task id nonexistent_task not found")
 
     def test_no_duplicate_joins_in_get_mapped_task_instances_query(
         self, one_task_with_mapped_tis, test_client
@@ -1533,20 +1547,20 @@ class TestGetTaskInstances(TestTaskInstanceEndpoint):
     def test_not_found(self, test_client):
         response = test_client.get("/dags/invalid/dagRuns/~/taskInstances")
         assert response.status_code == 404
-        assert response.json() == {"detail": "The Dag with ID: `invalid` was not found"}
+        assert_error_message(response, "The Dag with ID: `invalid` was not found")
 
     def test_dag_id_required_when_dag_run_id_specified(self, test_client):
         # dag_run_id is not unique - it requires dag_id to identify a specific dag_run
         response = test_client.get("/dags/~/dagRuns/some_run_id/taskInstances")
         assert response.status_code == 400
-        assert response.json() == {"detail": "dag_id is required when dag_run_id is specified"}
+        assert_error_message(response, "dag_id is required when dag_run_id is specified")
 
     def test_bad_state(self, test_client):
         response = test_client.get("/dags/~/dagRuns/~/taskInstances", params={"state": "invalid"})
         assert response.status_code == 422
-        assert (
-            response.json()["detail"]
-            == f"Invalid value for state. Valid values are {', '.join(TaskInstanceState)}"
+        assert_error_message(
+            response,
+            f"Invalid value for state. Valid values are {', '.join(TaskInstanceState)}",
         )
 
     def test_no_duplicate_joins_in_get_task_instances_query(self, test_client, session):
@@ -2505,10 +2519,10 @@ class TestGetTaskInstanceTry(TestTaskInstanceEndpoint):
             "/dags/example_python_operator/dagRuns/TEST_DAG_RUN_ID/taskInstances/nonexistent_task/tries/0"
         )
         assert response.status_code == 404
-
-        assert response.json() == {
-            "detail": "The Task Instance with dag_id: `example_python_operator`, run_id: `TEST_DAG_RUN_ID`, task_id: `nonexistent_task`, try_number: `0` and map_index: `-1` was not found"
-        }
+        assert_error_message(
+            response,
+            "The Task Instance with dag_id: `example_python_operator`, run_id: `TEST_DAG_RUN_ID`, task_id: `nonexistent_task`, try_number: `0` and map_index: `-1` was not found",
+        )
 
     @pytest.mark.parametrize(
         ("run_id", "expected_version_number"),
@@ -2976,7 +2990,7 @@ class TestPostClearTaskInstances(TestTaskInstanceEndpoint):
         assert response.status_code == 400
         assert (
             "Cannot use include_past or include_future with no logical_date(e.g. manually or asset-triggered)."
-            in response.json()["detail"]
+            in response.json()["detail"]["message"]
         )
 
     @pytest.mark.parametrize(
@@ -4022,10 +4036,10 @@ class TestGetTaskInstanceTries(TestTaskInstanceEndpoint):
             "/dags/example_python_operator/dagRuns/TEST_DAG_RUN_ID/taskInstances/non_existent_task/tries"
         )
         assert response.status_code == 404
-
-        assert response.json() == {
-            "detail": "The Task Instance with dag_id: `example_python_operator`, run_id: `TEST_DAG_RUN_ID`, task_id: `non_existent_task` and map_index: `-1` was not found"
-        }
+        assert_error_message(
+            response,
+            "The Task Instance with dag_id: `example_python_operator`, run_id: `TEST_DAG_RUN_ID`, task_id: `non_existent_task` and map_index: `-1` was not found",
+        )
 
     @pytest.mark.parametrize(
         ("run_id", "expected_version_number"),
@@ -4362,9 +4376,7 @@ class TestPatchTaskInstance(TestTaskInstanceEndpoint):
         ("error", "code", "payload"),
         [
             [
-                [
-                    "The Task Instance with dag_id: `example_python_operator`, run_id: `TEST_DAG_RUN_ID`, task_id: `print_the_context` and map_index: `None` was not found",
-                ],
+                "The Task Instance with dag_id: `example_python_operator`, run_id: `TEST_DAG_RUN_ID`, task_id: `print_the_context` and map_index: `None` was not found",
                 404,
                 {
                     "new_state": "failed",
@@ -4378,7 +4390,7 @@ class TestPatchTaskInstance(TestTaskInstanceEndpoint):
             json=payload,
         )
         assert response.status_code == code
-        assert response.json()["detail"] == error
+        assert_error_message(response, error)
 
     def test_should_200_for_unknown_fields(self, test_client, session):
         self.create_task_instances(session)
@@ -4398,7 +4410,7 @@ class TestPatchTaskInstance(TestTaskInstanceEndpoint):
             },
         )
         assert response.status_code == 404
-        assert response.json() == {"detail": "The Dag with ID: `non-existent-dag` was not found"}
+        assert_error_message(response, "The Dag with ID: `non-existent-dag` was not found")
 
     def test_should_raise_404_for_non_existent_task_in_dag(self, test_client):
         response = test_client.patch(
@@ -4408,9 +4420,7 @@ class TestPatchTaskInstance(TestTaskInstanceEndpoint):
             },
         )
         assert response.status_code == 404
-        assert response.json() == {
-            "detail": "Task 'non_existent_task' not found in DAG 'example_python_operator'"
-        }
+        assert_error_message(response, "Task 'non_existent_task' not found in DAG 'example_python_operator'")
 
     def test_should_raise_404_not_found_dag(self, test_client):
         response = test_client.patch(
@@ -5121,9 +5131,7 @@ class TestPatchTaskInstanceDryRun(TestTaskInstanceEndpoint):
         ("error", "code", "payload"),
         [
             [
-                [
-                    "The Task Instance with dag_id: `example_python_operator`, run_id: `TEST_DAG_RUN_ID`, task_id: `print_the_context` and map_index: `-1` was not found"
-                ],
+                "The Task Instance with dag_id: `example_python_operator`, run_id: `TEST_DAG_RUN_ID`, task_id: `print_the_context` and map_index: `-1` was not found",
                 404,
                 {
                     "new_state": "failed",
@@ -5137,7 +5145,7 @@ class TestPatchTaskInstanceDryRun(TestTaskInstanceEndpoint):
             json=payload,
         )
         assert response.status_code == code
-        assert response.json()["detail"] == error
+        assert_error_message(response, error)
 
     def test_should_200_for_unknown_fields(self, test_client, session):
         self.create_task_instances(session)
@@ -5157,7 +5165,7 @@ class TestPatchTaskInstanceDryRun(TestTaskInstanceEndpoint):
             },
         )
         assert response.status_code == 404
-        assert response.json() == {"detail": "The Dag with ID: `non-existent-dag` was not found"}
+        assert_error_message(response, "The Dag with ID: `non-existent-dag` was not found")
 
     def test_should_raise_404_for_non_existent_task_in_dag(self, test_client):
         response = test_client.patch(
@@ -5167,9 +5175,7 @@ class TestPatchTaskInstanceDryRun(TestTaskInstanceEndpoint):
             },
         )
         assert response.status_code == 404
-        assert response.json() == {
-            "detail": "Task 'non_existent_task' not found in DAG 'example_python_operator'"
-        }
+        assert_error_message(response, "Task 'non_existent_task' not found in DAG 'example_python_operator'")
 
     def test_should_raise_404_not_found_dag(self, test_client):
         response = test_client.patch(
@@ -5402,7 +5408,7 @@ class TestDeleteTaskInstance(TestTaskInstanceEndpoint):
             self.create_task_instances(session)
         response = test_client.delete(test_url)
         assert response.status_code == 404
-        assert response.json()["detail"] == expected_error
+        assert_error_message(response, expected_error)
 
     @pytest.mark.parametrize(
         ("task_instances", "map_index", "expected_status_code", "expected_remaining"),
@@ -5484,9 +5490,9 @@ class TestDeleteTaskInstance(TestTaskInstanceEndpoint):
         assert response.status_code == expected_status_code
 
         if expected_status_code == 404:
-            assert (
-                response.json()["detail"]
-                == f"The Task Instance with dag_id: `{self.DAG_ID}`, run_id: `{self.RUN_ID}`, task_id: `{self.TASK_ID}` and map_index: `{map_index}` was not found"
+            assert_error_message(
+                response,
+                f"The Task Instance with dag_id: `{self.DAG_ID}`, run_id: `{self.RUN_ID}`, task_id: `{self.TASK_ID}` and map_index: `{map_index}` was not found",
             )
         else:
             if map_index == -1:

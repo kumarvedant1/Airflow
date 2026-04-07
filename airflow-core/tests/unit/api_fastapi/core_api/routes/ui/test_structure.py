@@ -688,7 +688,8 @@ class TestStructureDataEndpoint:
     def test_should_return_404(self, test_client):
         response = test_client.get("/structure/structure_data", params={"dag_id": "not_existing"})
         assert response.status_code == 404
-        assert response.json()["detail"] == "Dag with id not_existing was not found"
+        assert response.json()["detail"]["message"] == "Dag with id not_existing was not found"
+        assert "reason" in response.json()["detail"]
 
     def test_should_return_404_when_dag_version_not_found(self, test_client):
         response = test_client.get(
@@ -696,9 +697,10 @@ class TestStructureDataEndpoint:
         )
         assert response.status_code == 404
         assert (
-            response.json()["detail"]
+            response.json()["detail"]["message"]
             == "Dag with id dag_with_multiple_versions and version number 999 was not found"
         )
+        assert "reason" in response.json()["detail"]
 
     def test_mapped_operator_graph_view(self, dag_maker, test_client, session):
         """

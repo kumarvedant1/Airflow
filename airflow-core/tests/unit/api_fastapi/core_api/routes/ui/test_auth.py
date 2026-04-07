@@ -51,7 +51,8 @@ class TestGetAuthLinks:
     def test_with_unauthenticated_user(self, unauthenticated_test_client):
         response = unauthenticated_test_client.get("/auth/menus")
         assert response.status_code == 401
-        assert response.json() == {"detail": "Not authenticated"}
+        assert response.json()["detail"]["message"] == "Not authenticated"
+        assert "reason" in response.json()["detail"]
 
     @mock.patch.object(SimpleAuthManager, "filter_authorized_menu_items", return_value=[])
     def test_with_unauthorized_user(self, _, unauthorized_test_client):
@@ -75,7 +76,8 @@ class TestGetMeResponse:
         """Test /auth/me endpoint with no authentication."""
         response = unauthenticated_test_client.get("/auth/me")
         assert response.status_code == 401
-        assert response.json() == {"detail": "Not authenticated"}
+        assert response.json()["detail"]["message"] == "Not authenticated"
+        assert "reason" in response.json()["detail"]
 
 
 class TestGenerateToken:
@@ -113,4 +115,5 @@ class TestGenerateToken:
         """Test that unauthenticated requests are rejected."""
         response = unauthenticated_test_client.post("/auth/token", json={"token_type": "api"})
         assert response.status_code == 401
-        assert response.json() == {"detail": "Not authenticated"}
+        assert response.json()["detail"]["message"] == "Not authenticated"
+        assert "reason" in response.json()["detail"]

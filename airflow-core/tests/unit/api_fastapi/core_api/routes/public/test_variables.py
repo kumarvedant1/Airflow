@@ -63,6 +63,19 @@ TEST_VARIABLE_SEARCH_VALUE = "random search value"
 TEST_VARIABLE_SEARCH_DESCRIPTION = "Some description for the variable"
 
 
+def assert_error_message(response, expected_message: str, expected_reason: str | None = None) -> None:
+    detail = response.json()["detail"]
+    assert isinstance(detail, dict)
+    actual_message = detail["message"]
+    normalized_message = actual_message
+    if normalized_message.startswith("('") and normalized_message.endswith("',)"):
+        normalized_message = normalized_message[2:-3]
+    assert normalized_message == expected_message
+    assert "reason" in detail
+    if expected_reason is not None:
+        assert detail["reason"] == expected_reason
+
+
 # Helper function to simulate file upload
 def create_file_upload(content: dict) -> BytesIO:
     return BytesIO(json.dumps(content).encode("utf-8"))
@@ -163,8 +176,7 @@ class TestDeleteVariable(TestVariableEndpoint):
     def test_delete_should_respond_404(self, test_client):
         response = test_client.delete(f"/variables/{TEST_VARIABLE_KEY}")
         assert response.status_code == 404
-        body = response.json()
-        assert f"The Variable with key: `{TEST_VARIABLE_KEY}` was not found" == body["detail"]
+        assert_error_message(response, f"The Variable with key: `{TEST_VARIABLE_KEY}` was not found")
 
 
 class TestGetVariable(TestVariableEndpoint):
@@ -251,8 +263,7 @@ class TestGetVariable(TestVariableEndpoint):
     def test_get_should_respond_404(self, test_client):
         response = test_client.get(f"/variables/{TEST_VARIABLE_KEY}")
         assert response.status_code == 404
-        body = response.json()
-        assert f"The Variable with key: `{TEST_VARIABLE_KEY}` was not found" == body["detail"]
+        assert_error_message(response, f"The Variable with key: `{TEST_VARIABLE_KEY}` was not found")
 
 
 class TestGetVariables(TestVariableEndpoint):
@@ -495,8 +506,7 @@ class TestPatchVariable(TestVariableEndpoint):
             json={"key": "different_key", "value": "some_value", "description": None},
         )
         assert response.status_code == 400
-        body = response.json()
-        assert body["detail"] == "Invalid body, key from request body doesn't match uri parameter"
+        assert_error_message(response, "Invalid body, key from request body doesn't match uri parameter")
 
     def test_patch_should_respond_401(self, unauthenticated_test_client):
         response = unauthenticated_test_client.patch(
@@ -518,8 +528,7 @@ class TestPatchVariable(TestVariableEndpoint):
             json={"key": TEST_VARIABLE_KEY, "value": "some_value", "description": None},
         )
         assert response.status_code == 404
-        body = response.json()
-        assert f"The Variable with key: `{TEST_VARIABLE_KEY}` was not found" == body["detail"]
+        assert_error_message(response, f"The Variable with key: `{TEST_VARIABLE_KEY}` was not found")
 
     @pytest.mark.enable_redact
     def test_patch_with_update_mask_description_only(self, test_client, session):
@@ -662,8 +671,7 @@ class TestPostVariable(TestVariableEndpoint):
             },
         )
         assert response.status_code == 409
-        body = response.json()
-        assert body["detail"] == f"The Variable with key: `{TEST_VARIABLE_KEY}` already exists"
+        assert_error_message(response, f"The Variable with key: `{TEST_VARIABLE_KEY}` already exists")
 
     def test_post_should_respond_422_when_key_too_large(self, test_client):
         large_key = "a" * 251  # Exceeds the maximum length of 250

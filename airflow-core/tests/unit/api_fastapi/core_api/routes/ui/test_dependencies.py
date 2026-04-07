@@ -271,9 +271,11 @@ class TestGetDependencies:
         response = test_client.get("/dependencies", params={"node_id": "missing_node_id"})
         assert response.status_code == 404
 
-        assert response.json() == {
-            "detail": "Unique connected component not found, got [] for connected components of node missing_node_id, expected only 1 connected component.",
-        }
+        assert (
+            response.json()["detail"]["message"]
+            == "Unique connected component not found, got [] for connected components of node missing_node_id, expected only 1 connected component."
+        )
+        assert "reason" in response.json()["detail"]
 
     @pytest.mark.parametrize(
         ("dependency_type", "has_dag", "has_task"),

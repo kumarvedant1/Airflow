@@ -1226,7 +1226,10 @@ class TestTIUpdateState:
             mock_register_asset_changes_in_db.return_value = None
             response = client.patch(f"/execution/task-instances/{ti.id}/state", json=payload)
             assert response.status_code == 500
-            assert response.json()["detail"] == "Database error occurred"
+            assert response.json()["detail"] == {
+                "reason": "database_error",
+                "message": "Database error occurred",
+            }
 
     @pytest.mark.parametrize("queues_enabled", [False, True])
     def test_ti_update_state_to_deferred(
@@ -1992,7 +1995,10 @@ class TestTIPutRTIF:
         random_id = uuid6.uuid7()
         response = client.put(f"/execution/task-instances/{random_id}/rtif", json=payload)
         assert response.status_code == 404
-        assert response.json()["detail"] == "Not Found"
+        assert response.json()["detail"] == {
+            "reason": "not_found",
+            "message": "Task Instance not found",
+        }
 
 
 class TestPreviousDagRun:
@@ -3232,7 +3238,7 @@ class TestTokenTypeValidation:
         payload = {"hostname": "test-host", "pid": 100}
         resp = client.put(f"/execution/task-instances/{ti.id}/heartbeat", json=payload)
         assert resp.status_code == 403
-        assert "Token type 'workload' not allowed" in resp.json()["detail"]
+        assert "Token type 'workload' not allowed" in resp.json()["detail"]["message"]
 
     def test_execution_scope_accepted_on_all_endpoints(self, client, session, create_task_instance):
         """execution scoped tokens should be able to call all endpoints."""
@@ -3276,7 +3282,7 @@ class TestTokenTypeValidation:
 
         resp = client.patch(f"/execution/task-instances/{ti.id}/run", json=payload)
         assert resp.status_code == 403
-        assert "Invalid token scope" in resp.json()["detail"]
+        assert "Invalid token scope" in resp.json()["detail"]["message"]
 
     def test_no_scope_defaults_to_execution(self, client, session, create_task_instance):
         """Tokens without scope claim should default to 'execution'."""

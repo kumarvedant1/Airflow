@@ -543,10 +543,11 @@ class TestGetTasks(TestTaskEndpoint):
             f"{self.api_prefix}/{self.dag_id}/tasks?order_by=invalid_task_colume_name",
         )
         assert response.status_code == 400
-        assert response.json()["detail"] == (
+        assert response.json()["detail"]["message"] == (
             "Ordering with 'invalid_task_colume_name' is disallowed or "
             "the attribute does not exist on the model"
         )
+        assert "reason" in response.json()["detail"]
 
     def test_should_respond_200_order_by_start_date_with_none(self, test_client):
         """Sorting by a nullable field should not raise TypeError (issue #63927)."""

@@ -528,7 +528,8 @@ class TestGetGridDataEndpoint:
     def test_should_response_404(self, test_client, endpoint):
         response = test_client.get(f"/grid/{endpoint}/invalid_dag")
         assert response.status_code == 404
-        assert response.json() == {"detail": "Dag with id invalid_dag was not found"}
+        assert response.json()["detail"]["message"] == "Dag with id invalid_dag was not found"
+        assert "reason" in response.json()["detail"]
 
     def test_structure_should_response_200_without_dag_run(self, test_client):
         with assert_queries_count(5):

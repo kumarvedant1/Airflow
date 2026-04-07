@@ -158,10 +158,9 @@ def init_config(app: FastAPI) -> None:
 
 
 def init_error_handlers(app: FastAPI) -> None:
-    from airflow.api_fastapi.common.exceptions import ERROR_HANDLERS
+    from airflow.api_fastapi.common.exceptions import register_exception_handlers
 
-    for handler in ERROR_HANDLERS:
-        app.add_exception_handler(handler.exception_cls, handler.exception_handler)
+    register_exception_handlers(app)
 
 
 def init_middlewares(app: FastAPI) -> None:

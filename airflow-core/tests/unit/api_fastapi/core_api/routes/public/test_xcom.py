@@ -69,6 +69,15 @@ run_id = DagRun.generate_run_id(
 )
 
 
+def assert_error_message(response, expected_message: str, expected_reason: str | None = None) -> None:
+    detail = response.json()["detail"]
+    assert isinstance(detail, dict)
+    assert detail["message"] == expected_message
+    assert "reason" in detail
+    if expected_reason is not None:
+        assert detail["reason"] == expected_reason
+
+
 @provide_session
 def _create_xcom(key, value, backend, session=None) -> None:
     XComModel.set(
@@ -162,7 +171,7 @@ class TestGetXComEntry(TestXComEndpoint):
             f"/dags/{TEST_DAG_ID}/dagRuns/{run_id}/taskInstances/{TEST_TASK_ID}/xcomEntries/{TEST_XCOM_KEY_2}"
         )
         assert response.status_code == 404
-        assert response.json()["detail"] == f"XCom entry with key: `{TEST_XCOM_KEY_2}` not found"
+        assert_error_message(response, f"XCom entry with key: `{TEST_XCOM_KEY_2}` not found")
 
     def test_should_respond_200_native_with_slash_key(self, test_client):
         slash_key = "folder/sub/value"
@@ -675,7 +684,7 @@ class TestCreateXComEntry(TestXComEndpoint):
 
         assert response.status_code == expected_status
         if expected_detail:
-            assert response.json()["detail"] == expected_detail
+            assert_error_message(response, expected_detail)
         elif expected_status == 201:
             # Validate the created XCom response
             current_data = response.json()
@@ -835,7 +844,7 @@ class TestPatchXComEntry(TestXComEndpoint):
         if expected_status == 200:
             assert response.json()["value"] == patch_body["value"]
         else:
-            assert response.json()["detail"] == expected_detail
+            assert_error_message(response, expected_detail)
         check_last_log(session, dag_id=TEST_DAG_ID, event="update_xcom_entry", logical_date=None)
 
     def test_should_respond_401(self, unauthenticated_test_client):

@@ -20,8 +20,9 @@ from __future__ import annotations
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
+from fastapi import APIRouter, Depends, Path, Request, status
 
+from airflow.api_fastapi.common.exceptions import ExecutionHTTPException
 from airflow.api_fastapi.execution_api.datamodels.variable import (
     VariablePostBody,
     VariableResponse,
@@ -70,12 +71,10 @@ def get_variable(
     try:
         variable_value = Variable.get(variable_key, team_name=team_name)
     except KeyError:
-        raise HTTPException(
+        raise ExecutionHTTPException(
             status.HTTP_404_NOT_FOUND,
-            detail={
-                "reason": "not_found",
-                "message": f"Variable with key '{variable_key}' not found",
-            },
+            reason="not_found",
+            message=f"Variable with key '{variable_key}' not found",
         )
 
     return VariableResponse(key=variable_key, value=variable_value)

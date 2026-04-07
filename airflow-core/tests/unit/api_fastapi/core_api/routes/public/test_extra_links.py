@@ -34,6 +34,18 @@ from tests_common.test_utils.mock_operators import CustomOperator
 pytestmark = pytest.mark.db_test
 
 
+def assert_error_message(
+    response,
+    expected_message: str,
+    expected_reason: str | None = None,
+) -> None:
+    detail = response.json()["detail"]
+    assert detail["message"] == expected_message
+    assert "reason" in detail
+    if expected_reason is not None:
+        assert detail["reason"] == expected_reason
+
+
 class GoogleLink(BaseOperatorLink):
     name = "Google"
 
@@ -115,27 +127,27 @@ class TestGetExtraLinks:
         return dag
 
     @pytest.mark.parametrize(
-        ("url", "expected_status_code", "expected_response"),
+        ("url", "expected_status_code", "expected_message"),
         [
             pytest.param(
                 "/dags/INVALID/dagRuns/TEST_DAG_RUN_ID/taskInstances/TEST_SINGLE_LINK/links",
                 404,
-                {"detail": "The Dag with ID: `INVALID` was not found"},
+                "The Dag with ID: `INVALID` was not found",
                 id="missing_dag",
             ),
             pytest.param(
                 "/dags/TEST_DAG_ID/dagRuns/TEST_DAG_RUN_ID/taskInstances/INVALID/links",
                 404,
-                {"detail": "Task with ID = INVALID not found"},
+                "Task with ID = INVALID not found",
                 id="missing_task",
             ),
         ],
     )
-    def test_should_respond_404(self, test_client, url, expected_status_code, expected_response):
+    def test_should_respond_404(self, test_client, url, expected_status_code, expected_message):
         response = test_client.get(url)
 
         assert response.status_code == expected_status_code
-        assert response.json() == expected_response
+        assert_error_message(response, expected_message)
 
     def test_should_respond_200(self, test_client, session):
         XCom.set(
@@ -304,7 +316,7 @@ class TestGetExtraLinks:
             params={"map_index": 4},
         )
         assert response.status_code == 404
-        assert response.json() == {"detail": "TaskInstance not found"}
+        assert_error_message(response, "TaskInstance not found")
 
     def test_should_not_deserialize_ill_formatted_links(self, test_client, session):
         import json

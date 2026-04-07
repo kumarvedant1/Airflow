@@ -55,6 +55,17 @@ DAG2_ID = "test_dag2"
 DAG3_ID = "test_dag3"
 
 
+def assert_error_message(response, expected_message: str, expected_reason: str | None = None) -> None:
+    detail = response.json()["detail"]
+    if isinstance(detail, dict):
+        assert detail["message"] == expected_message
+        assert "reason" in detail
+        if expected_reason is not None:
+            assert detail["reason"] == expected_reason
+    else:
+        assert detail == expected_message
+
+
 def _clean_db():
     clear_db_backfills()
     clear_db_runs()
@@ -191,7 +202,7 @@ class TestGetBackfill(TestBackfillEndpoint):
     def test_no_exist(self, session, test_client):
         response = test_client.get(f"/backfills/{231984098}")
         assert response.status_code == 404
-        assert response.json().get("detail") == "Backfill not found"
+        assert_error_message(response, "Backfill not found")
 
     def test_invalid_id(self, test_client):
         response = test_client.get("/backfills/invalid_id")
@@ -277,7 +288,7 @@ class TestCreateBackfill(TestBackfillEndpoint):
             json=data,
         )
         assert response.status_code == 404
-        assert response.json().get("detail") == "Could not find dag DAG_NOT_EXIST"
+        assert_error_message(response, "Could not find dag DAG_NOT_EXIST")
 
     def test_no_schedule_dag(self, session, dag_maker, test_client):
         with dag_maker(session=session, dag_id="TEST_DAG_1", schedule="None") as dag:
@@ -303,7 +314,7 @@ class TestCreateBackfill(TestBackfillEndpoint):
             json=data,
         )
         assert response.status_code == 422
-        assert response.json().get("detail") == f"{dag.dag_id} has no schedule"
+        assert_error_message(response, f"{dag.dag_id} has no schedule")
 
     @pytest.mark.parametrize(
         ("repro_act", "repro_exp", "run_backwards", "status_code"),
@@ -342,14 +353,14 @@ class TestCreateBackfill(TestBackfillEndpoint):
 
         if response.status_code != 200:
             if run_backwards:
-                assert (
-                    response.json().get("detail")
-                    == "Backfill cannot be run in reverse when the Dag has tasks where depends_on_past=True."
+                assert_error_message(
+                    response,
+                    "Backfill cannot be run in reverse when the Dag has tasks where depends_on_past=True.",
                 )
             else:
-                assert (
-                    response.json().get("detail")
-                    == "Dag has tasks for which depends_on_past=True. You must set reprocess behavior to reprocess completed or reprocess failed."
+                assert_error_message(
+                    response,
+                    "Dag has tasks for which depends_on_past=True. You must set reprocess behavior to reprocess completed or reprocess failed.",
                 )
 
     @pytest.mark.parametrize(
@@ -381,7 +392,7 @@ class TestCreateBackfill(TestBackfillEndpoint):
             json=data,
         )
         assert response.status_code == 422
-        assert response.json().get("detail") == "Backfill cannot be executed for future dates."
+        assert_error_message(response, "Backfill cannot be executed for future dates.")
 
     @pytest.mark.parametrize(
         "run_backwards",
@@ -578,7 +589,7 @@ class TestCreateBackfill(TestBackfillEndpoint):
             json=data,
         )
         assert response.status_code == 400
-        assert response.json()["detail"] == f"Dag with dag_id: '{dag.dag_id}' does not allow backfill runs"
+        assert_error_message(response, f"Dag with dag_id: '{dag.dag_id}' does not allow backfill runs")
 
     def test_should_respond_401(self, unauthenticated_test_client, dag_maker, session):
         with dag_maker(session=session, dag_id="TEST_DAG_1", schedule="0 * * * *") as dag:
@@ -794,14 +805,14 @@ class TestCreateBackfillDryRun(TestBackfillEndpoint):
 
         if response.status_code != 200:
             if run_backwards:
-                assert (
-                    response.json().get("detail")
-                    == "Backfill cannot be run in reverse when the Dag has tasks where depends_on_past=True."
+                assert_error_message(
+                    response,
+                    "Backfill cannot be run in reverse when the Dag has tasks where depends_on_past=True.",
                 )
             else:
-                assert (
-                    response.json().get("detail")
-                    == "Dag has tasks for which depends_on_past=True. You must set reprocess behavior to reprocess completed or reprocess failed."
+                assert_error_message(
+                    response,
+                    "Dag has tasks for which depends_on_past=True. You must set reprocess behavior to reprocess completed or reprocess failed.",
                 )
 
 
