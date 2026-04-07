@@ -40,7 +40,7 @@ Here's the list of all the Database Migrations that are executed via when you ru
 | Revision ID             | Revises ID       | Airflow Version   | Description                                                  |
 +=========================+==================+===================+==============================================================+
 | ``9ff64e1c35d3`` (head) | ``a4c2d171ae18`` | ``3.2.0``         | Add indexes on dag_run.created_dag_version_id and            |
-|                         |                  |                   | task_instance.dag_version_id                                 |
+|                         |                  |                   | task_instance.dag_version_id.                                |
 +-------------------------+------------------+-------------------+--------------------------------------------------------------+
 | ``a4c2d171ae18``        | ``1d6611b6ab7c`` | ``3.3.0``         | Add dag_result to XComModel.                                 |
 +-------------------------+------------------+-------------------+--------------------------------------------------------------+
