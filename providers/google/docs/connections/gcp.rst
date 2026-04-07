@@ -16,8 +16,7 @@
     under the License.
 
 
-
-.. _howto/connection:google_cloud_platform:
+.. _howto/connection:gcp:
 
 Google Cloud Connection
 ================================
@@ -42,16 +41,16 @@ There are three ways to connect to Google Cloud using Airflow:
    the ``google-auth`` library on how to retrieve external subject tokens and exchange them for service account access
    tokens.
 
-   .. warning:: Additional permissions might be needed
+.. warning::
 
-   Connection which uses key from the Secret Manager requires that `Application Default Credentials
-   <https://google-auth.readthedocs.io/en/latest/reference/google.auth.html#google.auth.default>`_ (ADC)
-   have permission to access payloads of secrets.
+  Connection which uses key from the Secret Manager requires that `Application Default Credentials
+  <https://google-auth.readthedocs.io/en/latest/reference/google.auth.html#google.auth.default>`_ (ADC)
+  have permission to access payloads of secrets. Additional permissions might be needed.
 
-   .. note:: Alternative way of storing connections
+.. note::
 
-   Besides storing only key in Secret Manager there is an option for storing entire connection.
-   For more details take a look at :ref:`Google Secret Manager Backend <google_cloud_secret_manager_backend>`.
+  Besides storing only key in Secret Manager there is an option for storing entire connection.
+  For more details take a look at :ref:`Google Secret Manager Backend <google_cloud_secret_manager_backend>`.
 
 Default Connection IDs
 ----------------------
@@ -82,7 +81,7 @@ For example:
 
    export AIRFLOW_CONN_GOOGLE_CLOUD_DEFAULT='google-cloud-platform://'
 
-.. _howto/connection:google_cloud_platform:configuring_the_connection:
+.. _howto/connection:gcp:configuring_the_connection:
 
 Configuring the Connection
 --------------------------
@@ -120,6 +119,23 @@ Scopes (comma separated)
     A list of comma-separated `Google Cloud scopes
     <https://developers.google.com/identity/protocols/googlescopes>`_ to
     authenticate with.
+
+
+Quota Project ID (optional)
+    The Google Cloud project ID to use for API quota and billing purposes. This is useful
+    when using a shared service account but want to attribute quota/billing to a different
+    project. If not specified, no separate quota project is configured on the credentials
+    and Google Cloud's default behavior applies. Must be a valid GCP project ID (lowercase
+    letters, digits, hyphens, 6-30 characters, starting with a letter).
+
+    .. note::
+
+        If using anonymous credentials, quota project logic is ignored.
+
+    .. warning::
+
+        Ensure the service account has permission to use the specified quota project.
+        Invalid or unauthorized quota project IDs will result in an error.
 
 Number of Retries
     Integer, number of times to retry with randomized
@@ -169,7 +185,7 @@ Impersonation Chain
 
        export AIRFLOW_CONN_GOOGLE_CLOUD_DEFAULT='{"conn_type": "google_cloud_platform", "extra": {"key_path": "/keys/key.json", "scope": "https://www.googleapis.com/auth/cloud-platform", "project": "airflow", "num_retries": 5}}'
 
-.. _howto/connection:google_cloud_platform:impersonation:
+.. _howto/connection:gcp:impersonation:
 
 Direct impersonation of a service account
 -----------------------------------------
@@ -309,3 +325,74 @@ Note that as domain-wide delegation is currently supported by most of the Google
 * All of Google Cloud operators and hooks.
 * Firebase hooks.
 * All transfer operators that involve Google cloud in different providers, for example: :class:`airflow.providers.amazon.aws.transfers.gcs_to_s3.GCSToS3Operator`.
+
+
+Quota Project Support
+---------------------
+
+Airflow's Google Cloud providers support specifying a "quota project" (a billing project) for
+API calls. That lets API usage be billed to a different Google Cloud project than the one that
+owns the service account. This is useful for organizations that share service accounts but
+centralize billing in specific projects.
+
+Usage
+~~~~~
+
+There are two ways to set a quota project in Airflow:
+
+- Via connection extras (recommended for environment-wide defaults).
+- Directly on operators or hooks (recommended when a single task must bill to a different project).
+
+Connection extras
+^^^^^^^^^^^^^^^^^
+
+Add the quota project ID to the Google Cloud connection extras. For example:
+
+.. code-block:: json
+
+  {
+    "quota_project_id": "your-billing-project-id"
+  }
+
+You can set this via the Airflow UI, the Connections REST API, or an environment variable, for
+example:
+
+.. code-block:: bash
+
+  export AIRFLOW_CONN_GOOGLE_CLOUD_DEFAULT='{
+    "conn_type": "google-cloud-platform",
+    "extra": {
+      "quota_project_id": "your-billing-project-id"
+    }
+  }'
+
+Hook parameter
+^^^^^^^^^^^^^^
+
+You can also pass the quota project directly when creating a hook. This takes
+precedence over the connection extras:
+
+.. code-block:: python
+
+  from airflow.providers.google.cloud.hooks.bigquery import BigQueryHook
+
+  hook = BigQueryHook(quota_project_id="your-billing-project-id")
+
+Priority
+^^^^^^^^
+
+If a quota project is provided both in the connection extras and as a hook
+parameter, the hook parameter wins.
+
+Compatibility
+^^^^^^^^^^^^^
+
+This setting works with Google Cloud services that support the quota project mechanism (the
+``x-goog-user-project`` header), for example BigQuery, Cloud Storage, Dataflow,
+and other Google Cloud APIs that accept quota project headers.
+
+Impact
+^^^^^^
+
+Using a quota project affects where API usage is billed, which quotas are applied, and how
+usage is reported for monitoring and auditing.
