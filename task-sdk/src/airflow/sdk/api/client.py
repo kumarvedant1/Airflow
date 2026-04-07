@@ -675,6 +675,7 @@ class AssetEventOperations:
         before: datetime | None = None,
         ascending: bool = True,
         limit: int | None = None,
+        partition_key: str | None = None,
     ) -> AssetEventsResponse:
         """Get Asset event from the API server."""
         common_params: dict[str, Any] = {}
@@ -683,8 +684,10 @@ class AssetEventOperations:
         if before:
             common_params["before"] = before.isoformat()
         common_params["ascending"] = ascending
-        if limit:
+        if limit is not None:
             common_params["limit"] = limit
+        if partition_key is not None:
+            common_params["partition_key_pattern"] = partition_key
         if name or uri:
             resp = self.client.get(
                 "asset-events/by-asset", params={"name": name, "uri": uri, **common_params}

@@ -108,6 +108,7 @@ export class AssetService {
      * @param data.sourceTaskId
      * @param data.sourceRunId
      * @param data.sourceMapIndex
+     * @param data.partitionKeyPattern Regular expression pattern for filtering. Uses database-native regex (PostgreSQL ~ operator, MySQL REGEXP). Not supported on SQLite.
      * @param data.namePattern SQL LIKE expression — use `%` / `_` wildcards (e.g. `%customer_%`). or the pipe `|` operator for OR logic (e.g. `dag1 | dag2`). Regular expressions are **not** supported.
      * @param data.timestampGte
      * @param data.timestampGt
@@ -129,6 +130,7 @@ export class AssetService {
                 source_task_id: data.sourceTaskId,
                 source_run_id: data.sourceRunId,
                 source_map_index: data.sourceMapIndex,
+                partition_key_pattern: data.partitionKeyPattern,
                 name_pattern: data.namePattern,
                 timestamp_gte: data.timestampGte,
                 timestamp_gt: data.timestampGt,
