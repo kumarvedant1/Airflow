@@ -1798,7 +1798,7 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
         actual_by_asset: dict[int, set[str]],
     ) -> bool | None:
         """
-        Return the rollup status for one asset within a pending partitioned dag run.
+        Return the rollup status for one asset within a pending partitioned Dag run.
 
         Returns *True*/*False* for rollup assets, or *None* when the asset has no
         rollup mapper and should default to satisfied.
@@ -1837,7 +1837,7 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
 
         # Pre-fetch all required serialized Dags in one query.
         dag_ids = list({apdr.target_dag_id for apdr in pending_apdrs if apdr.target_dag_id})
-        # dag_id → Serialized Dag
+        # {"dag_id": Serialized Dag}
         serialized_dags: dict[str, SerializedDAG] = {}
         for serdag in SerializedDagModel.get_latest_serialized_dags(dag_ids=dag_ids, session=session):
             try:
@@ -1846,8 +1846,9 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
             except Exception:
                 self.log.exception("Failed to deserialize Dag '%s'", serdag.dag_id)
 
-        # Fetch all key log rows + asset info for all pending apdrs in one query.
-        actual_by_asset_per_apdr: dict[int, dict[int, set[str]]] = defaultdict(lambda: defaultdict(set))
+        # {apdr_id: {asset_id: set(source_key, ...)}
+        source_key_by_asset_per_apdr: dict[int, dict[int, set[str]]] = defaultdict(lambda: defaultdict(set))
+        # {apdr_id: {asset_id: (asset_name, asset_uri)}
         asset_info_per_apdr: dict[int, dict[int, tuple[str, str]]] = defaultdict(dict)
         for apdr_id, asset_id, source_key, name, uri in session.execute(
             select(
@@ -1860,7 +1861,7 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
             .join(AssetModel, AssetModel.id == PartitionedAssetKeyLog.asset_id)
             .where(PartitionedAssetKeyLog.asset_partition_dag_run_id.in_(pending_apdr_ids))
         ):
-            actual_by_asset_per_apdr[apdr_id][asset_id].add(source_key)
+            source_key_by_asset_per_apdr[apdr_id][asset_id].add(source_key)
             asset_info_per_apdr[apdr_id][asset_id] = (name, uri)
 
         evaluator = AssetEvaluator(session)
@@ -1872,7 +1873,7 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
                 self.log.error("Dag '%s' not found in serialized_dag table", apdr.target_dag_id)
                 continue
 
-            actual_by_asset = actual_by_asset_per_apdr[apdr.id]
+            source_key_by_asset = source_key_by_asset_per_apdr[apdr.id]
             timetable = dag.timetable
             statuses: dict[SerializedAssetUniqueKey, bool] = {}
             for asset_id, (name, uri) in asset_info_per_apdr[apdr.id].items():
@@ -1884,7 +1885,7 @@ class SchedulerJobRunner(BaseJobRunner, LoggingMixin):
                         uri=uri,
                         apdr=apdr,
                         timetable=timetable,
-                        actual_by_asset=actual_by_asset,
+                        actual_by_asset=source_key_by_asset,
                     )
                     if status is not None:
                         statuses[key] = status
