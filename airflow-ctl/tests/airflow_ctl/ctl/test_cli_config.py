@@ -50,33 +50,27 @@ def no_op_method():
 def test_args_create():
     return [
         (
-            "--dag-id",
+            "dag_id",
             {
                 "help": "dag_id for backfill operation",
                 "action": None,
-                "default": None,
                 "type": str,
-                "dest": None,
             },
         ),
         (
-            "--from-date",
+            "from_date",
             {
                 "help": "from_date for backfill operation",
                 "action": None,
-                "default": None,
                 "type": str,
-                "dest": None,
             },
         ),
         (
-            "--to-date",
+            "to_date",
             {
                 "help": "to_date for backfill operation",
                 "action": None,
-                "default": None,
                 "type": str,
-                "dest": None,
             },
         ),
         (
@@ -86,7 +80,6 @@ def test_args_create():
                 "action": BooleanOptionalAction,
                 "default": False,
                 "type": bool,
-                "dest": None,
             },
         ),
         (
@@ -96,7 +89,6 @@ def test_args_create():
                 "action": None,
                 "default": None,
                 "type": dict,
-                "dest": None,
             },
         ),
         (
@@ -106,7 +98,6 @@ def test_args_create():
                 "action": None,
                 "default": None,
                 "type": str,
-                "dest": None,
             },
         ),
         (
@@ -116,7 +107,6 @@ def test_args_create():
                 "action": None,
                 "default": None,
                 "type": int,
-                "dest": None,
             },
         ),
     ]
@@ -149,12 +139,10 @@ def test_args_list():
 def test_args_get():
     return [
         (
-            "--backfill-id",
+            "backfill_id",
             {
                 "help": "backfill_id for get operation in BackfillsOperations",
-                "default": None,
                 "type": str,
-                "dest": None,
             },
         ),
         (
@@ -163,7 +151,6 @@ def test_args_get():
                 "help": "Output format. Allowed values: json, yaml, plain, table (default: json)",
                 "default": "json",
                 "type": str,
-                "dest": None,
             },
         ),
     ]
@@ -173,12 +160,10 @@ def test_args_get():
 def test_args_delete():
     return [
         (
-            "--backfill-id",
+            "backfill_id",
             {
                 "help": "backfill_id for delete operation in BackfillsOperations",
-                "default": None,
                 "type": str,
-                "dest": None,
             },
         ),
         (
@@ -187,7 +172,6 @@ def test_args_delete():
                 "help": "Output format. Allowed values: json, yaml, plain, table (default: json)",
                 "default": "json",
                 "type": str,
-                "dest": None,
             },
         ),
     ]
@@ -263,11 +247,10 @@ class TestCommandFactory:
                     for arg, test_arg in zip(sub_command.args, test_args_create):
                         assert arg.flags[0] == test_arg[0]
                         assert arg.kwargs["help"] == test_arg[1]["help"]
-                        assert arg.kwargs["action"] == test_arg[1]["action"]
-                        assert arg.kwargs["default"] == test_arg[1]["default"]
+                        assert arg.kwargs.get("action") == test_arg[1].get("action")
                         assert arg.kwargs["type"] == test_arg[1]["type"]
-                        assert arg.kwargs["dest"] == test_arg[1]["dest"]
-                        print(arg.flags)
+                        if "default" in test_arg[1]:
+                            assert arg.kwargs.get("default") == test_arg[1]["default"]
                 elif sub_command.name == "list":
                     for arg, test_arg in zip(sub_command.args, test_args_list):
                         assert arg.flags[0] == test_arg[0]
@@ -278,14 +261,16 @@ class TestCommandFactory:
                     for arg, test_arg in zip(sub_command.args, test_args_get):
                         assert arg.flags[0] == test_arg[0]
                         assert arg.kwargs["help"] == test_arg[1]["help"]
-                        assert arg.kwargs["default"] == test_arg[1]["default"]
                         assert arg.kwargs["type"] == test_arg[1]["type"]
+                        if "default" in test_arg[1]:
+                            assert arg.kwargs.get("default") == test_arg[1]["default"]
                 elif sub_command.name == "delete":
                     for arg, test_arg in zip(sub_command.args, test_args_delete):
                         assert arg.flags[0] == test_arg[0]
                         assert arg.kwargs["help"] == test_arg[1]["help"]
-                        assert arg.kwargs["default"] == test_arg[1]["default"]
                         assert arg.kwargs["type"] == test_arg[1]["type"]
+                        if "default" in test_arg[1]:
+                            assert arg.kwargs.get("default") == test_arg[1]["default"]
 
 
 class TestCliConfigMethods:
@@ -554,3 +539,60 @@ class TestCliConfigMethods:
 
         # Should return params unchanged for other datamodels
         assert result == params, "Params should be unchanged for non-TriggerDAGRunPostBody datamodels"
+
+    def test_positional_args_for_required_params(self):
+        """Test that required non-boolean params become positional args and optional params remain flags."""
+        command_factory = CommandFactory(file_path="")
+
+        # Required non-boolean → positional (no -- prefix)
+        positional_arg = command_factory._create_arg(
+            arg_flags=("connection_id",),
+            arg_type=str,
+            arg_help="Connection ID",
+            arg_action=None,
+        )
+        assert positional_arg.flags == ("connection_id",)
+        assert "dest" not in positional_arg.kwargs
+
+        # Optional → flag (-- prefix)
+        optional_arg = command_factory._create_arg(
+            arg_flags=("--description",),
+            arg_type=str,
+            arg_help="Description",
+            arg_action=None,
+        )
+        assert optional_arg.flags == ("--description",)
+
+    def test_has_default_detection_in_ast_parsing(self):
+        """Test that AST parsing correctly detects which params have defaults."""
+        from textwrap import dedent
+
+        temp_file = "test_has_default.py"
+        with open(temp_file, "w") as f:
+            f.write(
+                dedent("""
+                class TestOperations(BaseOperations):
+                    def get(self, required_id: str) -> str | ServerResponseError:
+                        pass
+                    def search(self, query: str, limit: int = 10, offset: int = 0) -> str | ServerResponseError:
+                        pass
+            """)
+            )
+
+        try:
+            command_factory = CommandFactory(file_path=temp_file)
+            for op in command_factory.operations:
+                if op["name"] == "get":
+                    param = op["parameters"][0]
+                    assert param.get("has_default") is False
+                elif op["name"] == "search":
+                    query_param = op["parameters"][0]
+                    assert query_param.get("has_default") is False
+                    limit_param = op["parameters"][1]
+                    assert limit_param.get("has_default") is True
+                    offset_param = op["parameters"][2]
+                    assert offset_param.get("has_default") is True
+        finally:
+            import os
+
+            os.remove(temp_file)
