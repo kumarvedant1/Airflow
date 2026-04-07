@@ -1140,3 +1140,47 @@ class TestBulkPools(TestPoolsEndpoint):
             },
         )
         assert response.status_code == 403
+
+    @conf_vars({("core", "multi_team"): "False"})
+    def test_bulk_rejects_team_name_when_multi_team_is_disabled(self, test_client):
+        actions = {
+            "actions": [
+                {
+                    "action": "create",
+                    "entities": [
+                        {
+                            "name": "pool_1",
+                            "slots": 1,
+                            "description": "description",
+                        },
+                        {
+                            "name": "pool_2",
+                            "slots": 2,
+                            "description": "description_2",
+                            "team_name": "test_team",
+                        },
+                    ],
+                },
+                {
+                    "action": "update",
+                    "entities": [
+                        {
+                            "name": "pool_3",
+                            "slots": 3,
+                            "description": "updated_description",
+                            "team_name": "test_team",
+                        },
+                        {
+                            "name": "pool_4",
+                            "slots": 4,
+                            "description": "updated_description_2",
+                        },
+                    ],
+                },
+            ]
+        }
+        response = test_client.patch("/pools", json=actions)
+
+        assert response.status_code == 400
+        assert response.json()["detail"]["message"] == MULTI_TEAM_ERROR_MESSAGE
+        assert response.json()["detail"]["invalid_pool_names"] == ["pool_2", "pool_3"]

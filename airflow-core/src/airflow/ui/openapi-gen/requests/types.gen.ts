@@ -4498,6 +4498,10 @@ export type $OpenApiTs = {
                  */
                 200: BulkResponse;
                 /**
+                 * Bad Request
+                 */
+                400: HTTPExceptionResponse;
+                /**
                  * Unauthorized
                  */
                 401: HTTPExceptionResponse;
@@ -6281,6 +6285,10 @@ export type $OpenApiTs = {
                  */
                 200: BulkResponse;
                 /**
+                 * Bad Request
+                 */
+                400: HTTPExceptionResponse;
+                /**
                  * Unauthorized
                  */
                 401: HTTPExceptionResponse;
@@ -6668,6 +6676,10 @@ export type $OpenApiTs = {
                  * Successful Response
                  */
                 200: BulkResponse;
+                /**
+                 * Bad Request
+                 */
+                400: HTTPExceptionResponse;
                 /**
                  * Unauthorized
                  */

@@ -1391,3 +1391,47 @@ class TestBulkVariables(TestVariableEndpoint):
             },
         )
         assert response.status_code == 403
+
+    @conf_vars({("core", "multi_team"): "False"})
+    def test_bulk_rejects_team_name_when_multi_team_is_disabled(self, test_client):
+        actions = {
+            "actions": [
+                {
+                    "action": "create",
+                    "entities": [
+                        {
+                            "key": "var_1",
+                            "value": "value_1",
+                            "description": "description",
+                        },
+                        {
+                            "key": "var_2",
+                            "value": "value_2",
+                            "description": "description_2",
+                            "team_name": "test_team",
+                        },
+                    ],
+                },
+                {
+                    "action": "update",
+                    "entities": [
+                        {
+                            "key": "var_3",
+                            "value": "value_3",
+                            "description": "updated_description",
+                            "team_name": "test_team",
+                        },
+                        {
+                            "key": "var_4",
+                            "value": "value_4",
+                            "description": "updated_description_2",
+                        },
+                    ],
+                },
+            ]
+        }
+        response = test_client.patch("/variables", json=actions)
+
+        assert response.status_code == 400
+        assert response.json()["detail"]["message"] == MULTI_TEAM_ERROR_MESSAGE
+        assert response.json()["detail"]["invalid_variable_keys"] == ["var_2", "var_3"]

@@ -175,7 +175,9 @@ def post_connection(
 
 
 @connections_router.patch(
-    "", dependencies=[Depends(requires_access_connection_bulk()), Depends(action_logging())]
+    "",
+    responses=create_openapi_http_exception_doc([status.HTTP_400_BAD_REQUEST]),
+    dependencies=[Depends(requires_access_connection_bulk()), Depends(action_logging())],
 )
 def bulk_connections(
     request: BulkBody[ConnectionBody],

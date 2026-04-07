@@ -190,6 +190,7 @@ def post_pool(
 
 @pools_router.patch(
     "",
+    responses=create_openapi_http_exception_doc([status.HTTP_400_BAD_REQUEST]),
     dependencies=[Depends(requires_access_pool_bulk()), Depends(action_logging())],
 )
 def bulk_pools(

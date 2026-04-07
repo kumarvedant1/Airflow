@@ -1651,6 +1651,50 @@ class TestBulkConnections(TestConnectionEndpoint):
 
         assert sorted(results.success) == [TEST_CONN_ID, TEST_CONN_ID_2]
 
+    @conf_vars({("core", "multi_team"): "False"})
+    def test_bulk_rejects_team_name_when_multi_team_is_disabled(self, test_client):
+        actions = {
+            "actions": [
+                {
+                    "action": "create",
+                    "entities": [
+                        {
+                            "connection_id": "test_conn_id_1",
+                            "conn_type": TEST_CONN_TYPE,
+                            "description": "description",
+                        },
+                        {
+                            "connection_id": "test_conn_id_2",
+                            "conn_type": TEST_CONN_TYPE_2,
+                            "description": "description_2",
+                            "team_name": "test_team",
+                        },
+                    ],
+                },
+                {
+                    "action": "update",
+                    "entities": [
+                        {
+                            "connection_id": "test_conn_id_3",
+                            "conn_type": TEST_CONN_TYPE,
+                            "description": "updated_description",
+                            "team_name": "test_team",
+                        },
+                        {
+                            "connection_id": "test_conn_id_4",
+                            "conn_type": TEST_CONN_TYPE_2,
+                            "description": "updated_description_2",
+                        },
+                    ],
+                },
+            ]
+        }
+        response = test_client.patch("/connections", json=actions)
+
+        assert response.status_code == 400
+        assert response.json()["detail"]["message"] == MULTI_TEAM_ERROR_MESSAGE
+        assert response.json()["detail"]["invalid_connection_ids"] == ["test_conn_id_2", "test_conn_id_3"]
+
 
 class TestPostConnectionExtraBackwardCompatibility(TestConnectionEndpoint):
     def test_post_should_accept_empty_string_as_extra(self, test_client, session):

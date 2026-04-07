@@ -197,7 +197,9 @@ def post_variable(
 
 
 @variables_router.patch(
-    "", dependencies=[Depends(action_logging()), Depends(requires_access_variable_bulk())]
+    "",
+    responses=create_openapi_http_exception_doc([status.HTTP_400_BAD_REQUEST]),
+    dependencies=[Depends(action_logging()), Depends(requires_access_variable_bulk())],
 )
 def bulk_variables(
     request: BulkBody[VariableBody],
