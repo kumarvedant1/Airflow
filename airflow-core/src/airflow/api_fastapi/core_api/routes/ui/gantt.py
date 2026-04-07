@@ -17,7 +17,10 @@
 
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, status
+from datetime import datetime
+from typing import Annotated
+
+from fastapi import Depends, HTTPException, Query, status
 from sqlalchemy import or_, select, union_all
 
 from airflow.api_fastapi.auth.managers.models.resource_details import DagAccessEntity
@@ -59,8 +62,16 @@ def get_gantt_data(
     dag_id: str,
     run_id: str,
     session: SessionDep,
+    start_date_range: Annotated[datetime | None, Query(alias="start_date")] = None,
+    end_date_range: Annotated[datetime | None, Query(alias="end_date")] = None,
 ) -> GanttResponse:
     """Get all task instance tries for Gantt chart."""
+    if start_date_range and end_date_range and start_date_range > end_date_range:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "start_date cannot be greater than end_date",
+        )
+
     # Exclude mapped tasks (use grid summaries) and UP_FOR_RETRY (already in history)
     current_tis = select(
         TaskInstance.task_id.label("task_id"),
@@ -74,6 +85,16 @@ def get_gantt_data(
         TaskInstance.run_id == run_id,
         TaskInstance.map_index == -1,
         or_(TaskInstance.state != TaskInstanceState.UP_FOR_RETRY, TaskInstance.state.is_(None)),
+        *(
+            [or_(TaskInstance.end_date >= start_date_range, TaskInstance.end_date.is_(None))]
+            if start_date_range is not None
+            else []
+        ),
+        *(
+            [TaskInstance.start_date <= end_date_range]
+            if end_date_range is not None
+            else []
+        ),
     )
 
     history_tis = select(
@@ -87,6 +108,16 @@ def get_gantt_data(
         TaskInstanceHistory.dag_id == dag_id,
         TaskInstanceHistory.run_id == run_id,
         TaskInstanceHistory.map_index == -1,
+        *(
+            [or_(TaskInstanceHistory.end_date >= start_date_range, TaskInstanceHistory.end_date.is_(None))]
+            if start_date_range is not None
+            else []
+        ),
+        *(
+            [TaskInstanceHistory.start_date <= end_date_range]
+            if end_date_range is not None
+            else []
+        ),
     )
 
     combined = union_all(current_tis, history_tis).subquery()
@@ -97,7 +128,7 @@ def get_gantt_data(
     if not results:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
-            f"No task instances for dag_id={dag_id} run_id={run_id}",
+            detail="DAG or DagRun not found",
         )
 
     task_instances = [
