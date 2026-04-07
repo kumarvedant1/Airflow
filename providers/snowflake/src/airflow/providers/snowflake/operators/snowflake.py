@@ -526,3 +526,48 @@ class SnowflakeSqlApiOperator(SQLExecuteQueryOperator):
             self.log.info("Cancelling the query ids %s", self.query_ids)
             self._hook.cancel_queries(self.query_ids)
             self.log.info("Query ids %s cancelled successfully", self.query_ids)
+
+
+class SnowflakeNotebookOperator(SnowflakeSqlApiOperator):
+    """
+    Execute a Snowflake Notebook via the Snowflake SQL API.
+
+    Builds an ``EXECUTE NOTEBOOK`` statement and delegates execution to
+    :class:`~airflow.providers.snowflake.operators.snowflake.SnowflakeSqlApiOperator`,
+    which handles query submission, polling, deferral, and cancellation.
+
+    .. seealso::
+        `Snowflake EXECUTE NOTEBOOK
+        <https://docs.snowflake.com/en/sql-reference/sql/execute-notebook>`_
+
+    :param notebook: Fully-qualified notebook name
+        (e.g. ``MY_DB.MY_SCHEMA.MY_NOTEBOOK``).
+    :param parameters: Optional list of parameter strings to pass to the
+        notebook.  Only string values are supported by Snowflake; other
+        data types are interpreted as NULL.  Parameters are accessible in
+        the notebook via ``sys.argv``.
+    """
+
+    template_fields: Sequence[str] = tuple(
+        set(SnowflakeSqlApiOperator.template_fields) | {"notebook", "parameters"}
+    )
+
+    def __init__(
+        self,
+        *,
+        notebook: str,
+        parameters: list[str] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        self.notebook = notebook
+        self.parameters = parameters
+        sql = self._build_execute_notebook_query()
+        super().__init__(sql=sql, statement_count=1, **kwargs)
+
+    def _build_execute_notebook_query(self) -> str:
+        """Build the ``EXECUTE NOTEBOOK`` SQL statement."""
+        params_clause = ""
+        if self.parameters:
+            escaped = ", ".join(f"'{p.replace(chr(39), chr(39) + chr(39))}'" for p in self.parameters)
+            params_clause = escaped
+        return f"EXECUTE NOTEBOOK {self.notebook}({params_clause})"
