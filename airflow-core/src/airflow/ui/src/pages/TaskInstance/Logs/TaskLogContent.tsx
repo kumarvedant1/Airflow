@@ -27,13 +27,17 @@ import { ErrorAlert } from "src/components/ErrorAlert";
 import { ProgressBar, Tooltip } from "src/components/ui";
 import { getMetaKey } from "src/utils";
 
-import { scrollToBottom, scrollToTop } from "./utils";
+import { HighlightedText } from "./HighlightedText";
+import { getHighlightColor, scrollToBottom, scrollToTop } from "./utils";
 
 export type TaskLogContentProps = {
+  readonly currentMatchLineIndex?: number;
   readonly error: unknown;
   readonly isLoading: boolean;
   readonly logError: unknown;
   readonly parsedLogs: Array<JSX.Element | string | undefined>;
+  readonly searchMatchIndices?: Set<number>;
+  readonly searchQuery?: string;
   readonly wrap: boolean;
 };
 
@@ -82,7 +86,16 @@ const ScrollToButton = ({
   );
 };
 
-export const TaskLogContent = ({ error, isLoading, logError, parsedLogs, wrap }: TaskLogContentProps) => {
+export const TaskLogContent = ({
+  currentMatchLineIndex,
+  error,
+  isLoading,
+  logError,
+  parsedLogs,
+  searchMatchIndices,
+  searchQuery,
+  wrap,
+}: TaskLogContentProps) => {
   const hash = location.hash.replace("#", "");
   const parentRef = useRef<HTMLDivElement | null>(null);
 
@@ -147,6 +160,12 @@ export const TaskLogContent = ({ error, isLoading, logError, parsedLogs, wrap }:
     }
   }, [isLoading, rowVirtualizer, hash, parsedLogs]);
 
+  useLayoutEffect(() => {
+    if (currentMatchLineIndex !== undefined && !isLoading) {
+      rowVirtualizer.scrollToIndex(Math.min(currentMatchLineIndex + 3, parsedLogs.length - 1));
+    }
+  }, [currentMatchLineIndex, isLoading, rowVirtualizer, parsedLogs]);
+
   const handleScrollTo = (to: "bottom" | "top") => {
     if (parsedLogs.length === 0) {
       return;
@@ -204,9 +223,12 @@ export const TaskLogContent = ({ error, isLoading, logError, parsedLogs, wrap }:
               <Box
                 _ltr={{ left: 0, right: "auto" }}
                 _rtl={{ left: "auto", right: 0 }}
-                bgColor={
-                  Boolean(hash) && virtualRow.index === Number(hash) - 1 ? "brand.emphasized" : "transparent"
-                }
+                bgColor={getHighlightColor({
+                  currentMatchLineIndex,
+                  hash,
+                  index: virtualRow.index,
+                  searchMatchIndices,
+                })}
                 data-index={virtualRow.index}
                 data-testid={`virtualized-item-${virtualRow.index}`}
                 key={virtualRow.key}
@@ -216,7 +238,9 @@ export const TaskLogContent = ({ error, isLoading, logError, parsedLogs, wrap }:
                 transform={`translateY(${virtualRow.start}px)`}
                 width={wrap ? "100%" : "max-content"}
               >
-                {parsedLogs[virtualRow.index] ?? undefined}
+                <HighlightedText query={searchMatchIndices?.has(virtualRow.index) ? searchQuery : undefined}>
+                  {parsedLogs[virtualRow.index] ?? undefined}
+                </HighlightedText>
               </Box>
             ))}
           </VStack>
