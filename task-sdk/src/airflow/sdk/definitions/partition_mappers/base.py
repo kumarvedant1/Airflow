@@ -16,6 +16,8 @@
 # under the License.
 from __future__ import annotations
 
+from abc import ABC
+
 
 class PartitionMapper:
     """
@@ -23,3 +25,22 @@ class PartitionMapper:
 
     Maps keys from asset events to target dag run partitions.
     """
+
+    is_rollup: bool = False
+
+
+class RollupMapper(PartitionMapper, ABC):
+    """
+    Partition mapper that supports rollup (many upstream keys → one downstream key).
+
+    Subclass this when the downstream Dag should wait for a complete set of upstream
+    partition keys before triggering. The scheduler calls ``to_upstream`` to discover
+    which source keys are required and only creates a Dag run once all of them have
+    arrived in ``PartitionedAssetKeyLog``.
+    """
+
+    is_rollup: bool = True
+
+    def to_upstream(self, downstream_key: str) -> frozenset[str]:
+        """Return the complete set of upstream partition keys required for *downstream_key*."""
+        raise NotImplementedError
