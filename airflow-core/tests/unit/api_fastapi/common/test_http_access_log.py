@@ -16,6 +16,9 @@
 # under the License.
 from __future__ import annotations
 
+from unittest import mock
+
+import pytest
 import structlog
 import structlog.testing
 from starlette.applications import Starlette
@@ -32,12 +35,24 @@ def _make_app(raise_exc: bool = False) -> Starlette:
             raise RuntimeError("boom")
         return PlainTextResponse("ok")
 
+    async def api_item(request):
+        return PlainTextResponse("ok")
+
+    async def ui_item(request):
+        return PlainTextResponse("ok")
+
+    async def api_fail(request):
+        raise RuntimeError("boom")
+
     async def health(request):
         return PlainTextResponse("healthy")
 
     app = Starlette(
         routes=[
             Route("/", homepage),
+            Route("/api/v2/items/{item_id}", api_item),
+            Route("/ui/items/{item_id}", ui_item),
+            Route("/api/v2/fail", api_fail),
             Route("/api/v2/monitor/health", health),
         ]
     )
@@ -130,3 +145,102 @@ def test_non_http_scope_not_logged():
 
 def test_health_paths_constant():
     assert "/api/v2/monitor/health" in _HEALTH_PATHS
+
+
+@pytest.mark.parametrize(
+    ("request_path", "route_tag", "api_surface"),
+    [
+        pytest.param("/api/v2/items/42", "/api/v2/items/{item_id}", "public", id="public"),
+        pytest.param("/ui/items/42", "/ui/items/{item_id}", "ui", id="ui"),
+    ],
+)
+def test_api_requests_emit_metrics(request_path, route_tag, api_surface):
+    with (
+        mock.patch("airflow.api_fastapi.common.http_access_log.Stats.incr") as mock_incr,
+        mock.patch("airflow.api_fastapi.common.http_access_log.Stats.timing") as mock_timing,
+    ):
+        client = TestClient(_make_app(), raise_server_exceptions=False)
+        response = client.get(request_path)
+
+    assert response.status_code == 200
+    expected_tags = {
+        "api_surface": api_surface,
+        "method": "GET",
+        "route": route_tag,
+        "status_code": "200",
+        "status_family": "2xx",
+    }
+    mock_incr.assert_called_once_with("api.requests", tags=expected_tags)
+    mock_timing.assert_called_once_with("api.request.duration", mock.ANY, tags=expected_tags)
+
+
+def test_non_api_paths_do_not_emit_metrics():
+    with (
+        mock.patch("airflow.api_fastapi.common.http_access_log.Stats.incr") as mock_incr,
+        mock.patch("airflow.api_fastapi.common.http_access_log.Stats.timing") as mock_timing,
+    ):
+        client = TestClient(_make_app(), raise_server_exceptions=False)
+        response = client.get("/")
+
+    assert response.status_code == 200
+    mock_incr.assert_not_called()
+    mock_timing.assert_not_called()
+
+
+def test_health_path_does_not_emit_metrics():
+    with (
+        mock.patch("airflow.api_fastapi.common.http_access_log.Stats.incr") as mock_incr,
+        mock.patch("airflow.api_fastapi.common.http_access_log.Stats.timing") as mock_timing,
+    ):
+        client = TestClient(_make_app(), raise_server_exceptions=False)
+        response = client.get("/api/v2/monitor/health")
+
+    assert response.status_code == 200
+    mock_incr.assert_not_called()
+    mock_timing.assert_not_called()
+
+
+def test_failed_api_requests_emit_error_metric():
+    with (
+        mock.patch("airflow.api_fastapi.common.http_access_log.Stats.incr") as mock_incr,
+        mock.patch("airflow.api_fastapi.common.http_access_log.Stats.timing") as mock_timing,
+    ):
+        client = TestClient(_make_app(), raise_server_exceptions=False)
+        response = client.get("/api/v2/fail")
+
+    assert response.status_code == 500
+    expected_tags = {
+        "api_surface": "public",
+        "method": "GET",
+        "route": "/api/v2/fail",
+        "status_code": "500",
+        "status_family": "5xx",
+    }
+    assert mock_incr.call_args_list == [
+        mock.call("api.requests", tags=expected_tags),
+        mock.call("api.request.errors", tags=expected_tags),
+    ]
+    mock_timing.assert_called_once_with("api.request.duration", mock.ANY, tags=expected_tags)
+
+
+def test_unmatched_api_requests_use_unmatched_route_tag():
+    with (
+        mock.patch("airflow.api_fastapi.common.http_access_log.Stats.incr") as mock_incr,
+        mock.patch("airflow.api_fastapi.common.http_access_log.Stats.timing") as mock_timing,
+    ):
+        client = TestClient(_make_app(), raise_server_exceptions=False)
+        response = client.get("/api/v2/missing")
+
+    assert response.status_code == 404
+    expected_tags = {
+        "api_surface": "public",
+        "method": "GET",
+        "route": "unmatched",
+        "status_code": "404",
+        "status_family": "4xx",
+    }
+    assert mock_incr.call_args_list == [
+        mock.call("api.requests", tags=expected_tags),
+        mock.call("api.request.errors", tags=expected_tags),
+    ]
+    mock_timing.assert_called_once_with("api.request.duration", mock.ANY, tags=expected_tags)

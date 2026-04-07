@@ -23,6 +23,9 @@ import time
 from typing import TYPE_CHECKING
 
 import structlog
+from starlette.routing import Match
+
+from airflow._shared.observability.metrics.stats import Stats
 
 if TYPE_CHECKING:
     from starlette.types import ASGIApp, Message, Receive, Scope, Send
@@ -30,6 +33,77 @@ if TYPE_CHECKING:
 logger = structlog.get_logger(logger_name="http.access")
 
 _HEALTH_PATHS = frozenset(["/api/v2/monitor/health"])
+_API_PATH_PREFIX_TO_SURFACE = (
+    ("/api/v2", "public"),
+    ("/ui", "ui"),
+)
+
+
+def _get_api_surface(path: str) -> str | None:
+    for prefix, surface in _API_PATH_PREFIX_TO_SURFACE:
+        if path == prefix or path.startswith(f"{prefix}/"):
+            return surface
+    return None
+
+
+def _get_status_family(status_code: int) -> str:
+    if status_code < 100:
+        return "unknown"
+    return f"{status_code // 100}xx"
+
+
+def _get_route_tag(scope: Scope) -> str:
+    router = scope.get("router")
+    routes = getattr(router, "routes", None)
+    partial_route_path: str | None = None
+    if routes:
+        for route in routes:
+            match, _ = route.matches(scope)
+            route_path = getattr(route, "path", None)
+            if not isinstance(route_path, str) or not route_path:
+                continue
+            if match == Match.FULL:
+                return route_path
+            if match == Match.PARTIAL and partial_route_path is None:
+                partial_route_path = route_path
+
+    if partial_route_path:
+        return partial_route_path
+
+    endpoint = scope.get("endpoint")
+    endpoint_name = getattr(endpoint, "__name__", None)
+    if isinstance(endpoint_name, str) and endpoint_name:
+        return endpoint_name
+
+    return "unmatched"
+
+
+def _emit_api_metrics(
+    *,
+    scope: Scope,
+    path: str,
+    method: str,
+    status_code: int,
+    duration_us: int,
+) -> None:
+    api_surface = _get_api_surface(path)
+    if api_surface is None:
+        return
+
+    # Keep tags bounded so API metrics remain usable across supported backends.
+    tags = {
+        "api_surface": api_surface,
+        "method": method or "UNKNOWN",
+        "route": _get_route_tag(scope),
+        "status_code": str(status_code) if status_code else "unknown",
+        "status_family": _get_status_family(status_code),
+    }
+    duration_ms = duration_us / 1000.0
+
+    Stats.incr("api.requests", tags=tags)
+    Stats.timing("api.request.duration", duration_ms, tags=tags)
+    if status_code >= 400:
+        Stats.incr("api.request.errors", tags=tags)
 
 
 class HttpAccessLogMiddleware:
@@ -94,6 +168,16 @@ class HttpAccessLogMiddleware:
                     query = scope["query_string"].decode("ascii", errors="replace")
                     client = scope.get("client")
                     client_addr = f"{client[0]}:{client[1]}" if client else None
+
+                    # Observability failures must never affect serving the request.
+                    with contextlib.suppress(Exception):
+                        _emit_api_metrics(
+                            scope=scope,
+                            path=path,
+                            method=method,
+                            status_code=status,
+                            duration_us=duration_us,
+                        )
 
                     logger.info(
                         "request finished",

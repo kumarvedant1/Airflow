@@ -504,9 +504,30 @@ metrics:
     legacy_name: "edge_worker.ti.finish.{queue}.{state}.{dag_id}.{task_id}"
     name_variables: ["queue", "state", "dag_id", "task_id"]
 
+  - name: "api.requests"
+    description: "Number of completed REST API requests. Metric with api_surface, method, route,
+    status_code and status_family tagging."
+    type: "counter"
+    legacy_name: "-"
+    name_variables: []
+
+  - name: "api.request.errors"
+    description: "Number of failed REST API requests. Metric with api_surface, method, route,
+    status_code and status_family tagging."
+    type: "counter"
+    legacy_name: "-"
+    name_variables: []
+
   # ==========
   # Timers
   # ==========
+  - name: "api.request.duration"
+    description: "Milliseconds taken to complete a REST API request. Metric with api_surface,
+    method, route, status_code and status_family tagging."
+    type: "timer"
+    legacy_name: "-"
+    name_variables: []
+
   - name: "dagrun.dependency-check"
     description: "Milliseconds taken to check Dag dependencies"
     type: "timer"
