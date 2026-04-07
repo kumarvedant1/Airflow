@@ -162,9 +162,18 @@ def decode_deadline_alert(encoded_data: dict):
     reference_data = data[DeadlineAlertFields.REFERENCE]
     reference = decode_deadline_reference(reference_data)
 
+    raw_interval = data[DeadlineAlertFields.INTERVAL]
+
+    # Backward compatibility: previously interval was stored as total_seconds() (float/int).
+    # Handle numeric values by converting to timedelta.
+    if isinstance(raw_interval, (int, float)):
+        interval = datetime.timedelta(seconds=raw_interval)
+    else:
+        interval = deserialize(raw_interval)
+
     return SerializedDeadlineAlert(
         reference=reference,
-        interval=datetime.timedelta(seconds=data[DeadlineAlertFields.INTERVAL]),
+        interval=interval,
         callback=deserialize(data[DeadlineAlertFields.CALLBACK]),
     )
 

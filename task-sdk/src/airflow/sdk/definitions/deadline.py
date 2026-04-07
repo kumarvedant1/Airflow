@@ -20,9 +20,12 @@ import logging
 from abc import ABC
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
+
+import attrs
 
 from airflow.sdk.definitions.callback import AsyncCallback, Callback, SyncCallback
+from airflow.sdk.definitions.variable import Variable
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -32,6 +35,10 @@ logger = logging.getLogger(__name__)
 
 # Field name used in serialization - must be in sync with SerializedReferenceModels.REFERENCE_TYPE_FIELD
 REFERENCE_TYPE_FIELD = "reference_type"
+
+
+class _ResolvableInterval(Protocol):
+    def resolve(self) -> timedelta: ...
 
 
 class BaseDeadlineReference(ABC):
@@ -143,7 +150,7 @@ class DeadlineAlert:
     def __init__(
         self,
         reference: DeadlineReferenceType,
-        interval: timedelta,
+        interval: timedelta | _ResolvableInterval,
         callback: Callback,
     ):
         self.reference = reference
@@ -340,3 +347,58 @@ def deadline_reference(
         return reference_class
 
     return decorator
+
+
+@attrs.define
+class VariableInterval:
+    """
+    Interval backed by an Airflow Variable.
+
+    This allows DeadlineAlert intervals to be configured dynamically using
+    Airflow Variables. The variable value is interpreted as minutes and
+    converted into a ``timedelta``.
+
+    ------
+    Usage:
+    ------
+
+    .. code-block:: python
+
+    from airflow.sdk import DAG, DeadlineAlert, DeadlineReference, AsyncCallback
+
+    DAG(
+        dag_id="dag_with_variable_interval",
+        deadline=DeadlineAlert(
+            reference=DeadlineReference.DAGRUN_QUEUED_AT,
+            interval=VariableInterval("deadline_minutes"),
+            callback=AsyncCallback(my_callback),
+        ),
+    )
+
+    ------
+    Notes:
+    ------
+    * Resolution occurs when deadlines are evaluated (during DagRun creation).
+    * Changes to the Variable affect only newly parsed DAGs and future DagRuns.
+    * Existing deadlines are not retroactively updated.
+    """
+
+    key: str
+
+    def resolve(self) -> timedelta:
+        try:
+            value = Variable.get(self.key)
+        except KeyError as e:
+            raise ValueError(f"VariableInterval '{self.key}' not found") from e
+
+        try:
+            minutes = int(value)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"VariableInterval '{self.key}' must be an integer (minutes), got: {value!r}"
+            ) from e
+
+        if minutes <= 0:
+            raise ValueError(f"VariableInterval '{self.key}' must be > 0, got: {minutes}")
+
+        return timedelta(minutes=minutes)
