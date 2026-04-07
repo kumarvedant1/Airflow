@@ -78,6 +78,7 @@ from airflow.sdk.definitions.partition_mappers.temporal import (
 from airflow.sdk.definitions.taskgroup import TaskGroup as TaskGroup
 from airflow.sdk.definitions.template import literal as literal
 from airflow.sdk.definitions.timetables.assets import (
+    AssetAndTimeSchedule,
     AssetOrTimeSchedule,
     PartitionedAssetTimetable,
 )
@@ -106,6 +107,7 @@ __all__ = [
     "Asset",
     "AssetAlias",
     "AssetAll",
+    "AssetAndTimeSchedule",
     "AssetAny",
     "AssetOrTimeSchedule",
     "AssetWatcher",
