@@ -30,6 +30,10 @@ from airflow.configuration import conf
 from airflow.exceptions import DeserializationError
 from airflow.utils.strings import get_random_string
 
+MULTI_TEAM_ERROR_MESSAGE = (
+    "team_name cannot be set when multi_team mode is disabled. Please contact your administrator."
+)
+
 T = TypeVar("T", bound=Exception)
 
 log = logging.getLogger(__name__)

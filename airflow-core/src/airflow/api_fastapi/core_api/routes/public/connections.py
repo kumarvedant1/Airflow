@@ -25,6 +25,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from airflow.api_fastapi.common.db.common import SessionDep, paginated_select
+from airflow.api_fastapi.common.exceptions import MULTI_TEAM_ERROR_MESSAGE
 from airflow.api_fastapi.common.parameters import (
     QueryConnectionIdPatternSearch,
     QueryLimit,
@@ -33,6 +34,7 @@ from airflow.api_fastapi.common.parameters import (
 )
 from airflow.api_fastapi.common.router import AirflowRouter
 from airflow.api_fastapi.core_api.datamodels.common import (
+    BulkAction,
     BulkBody,
     BulkResponse,
 )
@@ -149,8 +151,11 @@ def get_connections(
     "",
     status_code=status.HTTP_201_CREATED,
     responses=create_openapi_http_exception_doc(
-        [status.HTTP_409_CONFLICT]
-    ),  # handled by global exception handler
+        [
+            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_409_CONFLICT,  # handled by global exception handler
+        ]
+    ),
     dependencies=[Depends(requires_access_connection(method="POST")), Depends(action_logging())],
 )
 def post_connection(
@@ -158,19 +163,45 @@ def post_connection(
     session: SessionDep,
 ) -> ConnectionResponse:
     """Create connection entry."""
+    if post_body.team_name is not None and not conf.getboolean("core", "multi_team"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            MULTI_TEAM_ERROR_MESSAGE,
+        )
+
     connection = Connection(**post_body.model_dump(by_alias=True))
     session.add(connection)
     return connection
 
 
 @connections_router.patch(
-    "", dependencies=[Depends(requires_access_connection_bulk()), Depends(action_logging())]
+    "",
+    responses=create_openapi_http_exception_doc([status.HTTP_400_BAD_REQUEST]),
+    dependencies=[Depends(requires_access_connection_bulk()), Depends(action_logging())],
 )
 def bulk_connections(
     request: BulkBody[ConnectionBody],
     session: SessionDep,
 ) -> BulkResponse:
     """Bulk create, update, and delete connections."""
+    if not conf.getboolean("core", "multi_team"):
+        invalid_entities = []
+
+        for action in request.actions:
+            if action.action == BulkAction.CREATE or action.action == BulkAction.UPDATE:
+                for entity in action.entities:
+                    if isinstance(entity, ConnectionBody) and entity.team_name is not None:
+                        invalid_entities.append(entity.connection_id)
+
+        if invalid_entities:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                {
+                    "message": MULTI_TEAM_ERROR_MESSAGE,
+                    "invalid_connection_ids": invalid_entities,
+                },
+            )
+
     return BulkConnectionService(session=session, request=request).handle_request()
 
 
@@ -191,6 +222,12 @@ def patch_connection(
     update_mask: list[str] | None = Query(None),
 ) -> ConnectionResponse:
     """Update a connection entry."""
+    if patch_body.team_name is not None and not conf.getboolean("core", "multi_team"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            MULTI_TEAM_ERROR_MESSAGE,
+        )
+
     if patch_body.connection_id != connection_id:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,

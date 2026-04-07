@@ -22,6 +22,7 @@ from fastapi import Depends, HTTPException, Query, status
 from sqlalchemy import delete, select
 
 from airflow.api_fastapi.common.db.common import SessionDep, paginated_select
+from airflow.api_fastapi.common.exceptions import MULTI_TEAM_ERROR_MESSAGE
 from airflow.api_fastapi.common.parameters import (
     QueryLimit,
     QueryOffset,
@@ -29,7 +30,7 @@ from airflow.api_fastapi.common.parameters import (
     SortParam,
 )
 from airflow.api_fastapi.common.router import AirflowRouter
-from airflow.api_fastapi.core_api.datamodels.common import BulkBody, BulkResponse
+from airflow.api_fastapi.core_api.datamodels.common import BulkAction, BulkBody, BulkResponse
 from airflow.api_fastapi.core_api.datamodels.variables import (
     VariableBody,
     VariableCollectionResponse,
@@ -46,6 +47,7 @@ from airflow.api_fastapi.core_api.services.public.variables import (
     update_orm_from_pydantic,
 )
 from airflow.api_fastapi.logging.decorators import action_logging
+from airflow.configuration import conf
 from airflow.models.variable import Variable
 
 variables_router = AirflowRouter(tags=["Variable"], prefix="/variables")
@@ -147,6 +149,12 @@ def patch_variable(
     update_mask: list[str] | None = Query(None),
 ) -> VariableResponse:
     """Update a variable by key."""
+    if patch_body.team_name is not None and not conf.getboolean("core", "multi_team"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            MULTI_TEAM_ERROR_MESSAGE,
+        )
+
     variable = update_orm_from_pydantic(variable_key, patch_body, update_mask, session)
     return variable
 
@@ -154,7 +162,7 @@ def patch_variable(
 @variables_router.post(
     "",
     status_code=status.HTTP_201_CREATED,
-    responses=create_openapi_http_exception_doc([status.HTTP_409_CONFLICT]),
+    responses=create_openapi_http_exception_doc([status.HTTP_400_BAD_REQUEST, status.HTTP_409_CONFLICT]),
     dependencies=[Depends(action_logging()), Depends(requires_access_variable("POST"))],
 )
 def post_variable(
@@ -162,6 +170,12 @@ def post_variable(
     session: SessionDep,
 ) -> VariableResponse:
     """Create a variable."""
+    if post_body.team_name is not None and not conf.getboolean("core", "multi_team"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            MULTI_TEAM_ERROR_MESSAGE,
+        )
+
     # Check if the key already exists
     existing_variable = session.scalar(select(Variable).where(Variable.key == post_body.key).limit(1))
     if existing_variable:
@@ -183,11 +197,31 @@ def post_variable(
 
 
 @variables_router.patch(
-    "", dependencies=[Depends(action_logging()), Depends(requires_access_variable_bulk())]
+    "",
+    responses=create_openapi_http_exception_doc([status.HTTP_400_BAD_REQUEST]),
+    dependencies=[Depends(action_logging()), Depends(requires_access_variable_bulk())],
 )
 def bulk_variables(
     request: BulkBody[VariableBody],
     session: SessionDep,
 ) -> BulkResponse:
     """Bulk create, update, and delete variables."""
+    if not conf.getboolean("core", "multi_team"):
+        invalid_entities = []
+
+        for action in request.actions:
+            if action.action == BulkAction.CREATE or action.action == BulkAction.UPDATE:
+                for entity in action.entities:
+                    if isinstance(entity, VariableBody) and entity.team_name is not None:
+                        invalid_entities.append(entity.key)
+
+        if invalid_entities:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                {
+                    "message": MULTI_TEAM_ERROR_MESSAGE,
+                    "invalid_variable_keys": invalid_entities,
+                },
+            )
+
     return BulkVariableService(session=session, request=request).handle_request()

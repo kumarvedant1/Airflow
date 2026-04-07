@@ -24,6 +24,7 @@ from unittest.mock import ANY
 import pytest
 from sqlalchemy import select
 
+from airflow.api_fastapi.common.exceptions import MULTI_TEAM_ERROR_MESSAGE
 from airflow.models.team import Team
 from airflow.models.variable import Variable
 from airflow.utils.session import provide_session
@@ -521,6 +522,18 @@ class TestPatchVariable(TestVariableEndpoint):
         body = response.json()
         assert f"The Variable with key: `{TEST_VARIABLE_KEY}` was not found" == body["detail"]
 
+    @conf_vars({("core", "multi_team"): "False"})
+    def test_patch_rejects_team_name_when_multi_team_disabled(self, test_client):
+        body = {
+            "key": TEST_VARIABLE_KEY,
+            "value": "The new value",
+            "description": "The new description",
+            "team_name": "test_team",
+        }
+        response = test_client.patch(f"/variables/{TEST_VARIABLE_KEY}", json=body)
+        assert response.status_code == 400
+        assert response.json()["detail"] == MULTI_TEAM_ERROR_MESSAGE
+
     @pytest.mark.enable_redact
     def test_patch_with_update_mask_description_only(self, test_client, session):
         """PATCH with update_mask=['description'] should only update description, keeping value unchanged."""
@@ -685,6 +698,18 @@ class TestPostVariable(TestVariableEndpoint):
                 }
             ]
         }
+
+    @conf_vars({("core", "multi_team"): "False"})
+    def test_post_rejects_team_name_when_multi_team_disabled(self, test_client):
+        body = {
+            "key": "new variable key",
+            "value": "new variable value",
+            "description": "new variable description",
+            "team_name": "test_team",
+        }
+        response = test_client.post("/variables", json=body)
+        assert response.status_code == 400
+        assert response.json()["detail"] == MULTI_TEAM_ERROR_MESSAGE
 
     @pytest.mark.parametrize(
         "body",
@@ -1366,3 +1391,47 @@ class TestBulkVariables(TestVariableEndpoint):
             },
         )
         assert response.status_code == 403
+
+    @conf_vars({("core", "multi_team"): "False"})
+    def test_bulk_rejects_team_name_when_multi_team_is_disabled(self, test_client):
+        actions = {
+            "actions": [
+                {
+                    "action": "create",
+                    "entities": [
+                        {
+                            "key": "var_1",
+                            "value": "value_1",
+                            "description": "description",
+                        },
+                        {
+                            "key": "var_2",
+                            "value": "value_2",
+                            "description": "description_2",
+                            "team_name": "test_team",
+                        },
+                    ],
+                },
+                {
+                    "action": "update",
+                    "entities": [
+                        {
+                            "key": "var_3",
+                            "value": "value_3",
+                            "description": "updated_description",
+                            "team_name": "test_team",
+                        },
+                        {
+                            "key": "var_4",
+                            "value": "value_4",
+                            "description": "updated_description_2",
+                        },
+                    ],
+                },
+            ]
+        }
+        response = test_client.patch("/variables", json=actions)
+
+        assert response.status_code == 400
+        assert response.json()["detail"]["message"] == MULTI_TEAM_ERROR_MESSAGE
+        assert response.json()["detail"]["invalid_variable_keys"] == ["var_2", "var_3"]

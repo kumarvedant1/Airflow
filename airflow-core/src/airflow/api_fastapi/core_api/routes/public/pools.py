@@ -23,6 +23,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.engine import CursorResult
 
 from airflow.api_fastapi.common.db.common import SessionDep, paginated_select
+from airflow.api_fastapi.common.exceptions import MULTI_TEAM_ERROR_MESSAGE
 from airflow.api_fastapi.common.parameters import (
     QueryLimit,
     QueryOffset,
@@ -30,7 +31,7 @@ from airflow.api_fastapi.common.parameters import (
     SortParam,
 )
 from airflow.api_fastapi.common.router import AirflowRouter
-from airflow.api_fastapi.core_api.datamodels.common import BulkBody, BulkResponse
+from airflow.api_fastapi.core_api.datamodels.common import BulkAction, BulkBody, BulkResponse
 from airflow.api_fastapi.core_api.datamodels.pools import (
     PoolBody,
     PoolCollectionResponse,
@@ -45,6 +46,7 @@ from airflow.api_fastapi.core_api.security import (
 )
 from airflow.api_fastapi.core_api.services.public.pools import BulkPoolService, update_orm_from_pydantic
 from airflow.api_fastapi.logging.decorators import action_logging
+from airflow.configuration import conf
 from airflow.models.pool import Pool
 
 pools_router = AirflowRouter(tags=["Pool"], prefix="/pools")
@@ -143,6 +145,12 @@ def patch_pool(
     update_mask: list[str] | None = Query(None),
 ) -> PoolResponse:
     """Update a Pool."""
+    if patch_body.team_name is not None and not conf.getboolean("core", "multi_team"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            MULTI_TEAM_ERROR_MESSAGE,
+        )
+
     if patch_body.name and patch_body.name != pool_name:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -157,8 +165,11 @@ def patch_pool(
     "",
     status_code=status.HTTP_201_CREATED,
     responses=create_openapi_http_exception_doc(
-        [status.HTTP_409_CONFLICT]
-    ),  # handled by global exception handler
+        [
+            status.HTTP_400_BAD_REQUEST,
+            status.HTTP_409_CONFLICT,  # handled by global exception handler
+        ]
+    ),
     dependencies=[Depends(requires_access_pool(method="POST")), Depends(action_logging())],
 )
 def post_pool(
@@ -166,6 +177,12 @@ def post_pool(
     session: SessionDep,
 ) -> PoolResponse:
     """Create a Pool."""
+    if body.team_name is not None and not conf.getboolean("core", "multi_team"):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            MULTI_TEAM_ERROR_MESSAGE,
+        )
+
     pool = Pool(**body.model_dump())
     session.add(pool)
     return pool
@@ -173,6 +190,7 @@ def post_pool(
 
 @pools_router.patch(
     "",
+    responses=create_openapi_http_exception_doc([status.HTTP_400_BAD_REQUEST]),
     dependencies=[Depends(requires_access_pool_bulk()), Depends(action_logging())],
 )
 def bulk_pools(
@@ -180,4 +198,22 @@ def bulk_pools(
     session: SessionDep,
 ) -> BulkResponse:
     """Bulk create, update, and delete pools."""
+    if not conf.getboolean("core", "multi_team"):
+        invalid_entities = []
+
+        for action in request.actions:
+            if action.action == BulkAction.CREATE or action.action == BulkAction.UPDATE:
+                for entity in action.entities:
+                    if isinstance(entity, PoolBody) and entity.team_name is not None:
+                        invalid_entities.append(entity.pool)
+
+        if invalid_entities:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                {
+                    "message": MULTI_TEAM_ERROR_MESSAGE,
+                    "invalid_pool_names": invalid_entities,
+                },
+            )
+
     return BulkPoolService(session=session, request=request).handle_request()

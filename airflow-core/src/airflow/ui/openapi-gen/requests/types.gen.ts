@@ -4469,6 +4469,10 @@ export type $OpenApiTs = {
                  */
                 201: ConnectionResponse;
                 /**
+                 * Bad Request
+                 */
+                400: HTTPExceptionResponse;
+                /**
                  * Unauthorized
                  */
                 401: HTTPExceptionResponse;
@@ -4493,6 +4497,10 @@ export type $OpenApiTs = {
                  * Successful Response
                  */
                 200: BulkResponse;
+                /**
+                 * Bad Request
+                 */
+                400: HTTPExceptionResponse;
                 /**
                  * Unauthorized
                  */
@@ -6248,6 +6256,10 @@ export type $OpenApiTs = {
                  */
                 201: PoolResponse;
                 /**
+                 * Bad Request
+                 */
+                400: HTTPExceptionResponse;
+                /**
                  * Unauthorized
                  */
                 401: HTTPExceptionResponse;
@@ -6272,6 +6284,10 @@ export type $OpenApiTs = {
                  * Successful Response
                  */
                 200: BulkResponse;
+                /**
+                 * Bad Request
+                 */
+                400: HTTPExceptionResponse;
                 /**
                  * Unauthorized
                  */
@@ -6632,6 +6648,10 @@ export type $OpenApiTs = {
                  */
                 201: VariableResponse;
                 /**
+                 * Bad Request
+                 */
+                400: HTTPExceptionResponse;
+                /**
                  * Unauthorized
                  */
                 401: HTTPExceptionResponse;
@@ -6656,6 +6676,10 @@ export type $OpenApiTs = {
                  * Successful Response
                  */
                 200: BulkResponse;
+                /**
+                 * Bad Request
+                 */
+                400: HTTPExceptionResponse;
                 /**
                  * Unauthorized
                  */
