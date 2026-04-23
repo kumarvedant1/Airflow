@@ -18,7 +18,7 @@
 [build-system]
 requires = [
     "hatchling==1.29.0",
-    "packaging==26.0",
+    "packaging==26.1",
     "pathspec==1.0.4",
     "pluggy==1.6.0",
     "tomli==2.4.0; python_version < '3.11'",
@@ -63,8 +63,8 @@ classifiers = [
 version = "3.1.7"
 
 dependencies = [
-    "apache-airflow-task-sdk==1.1.7",
-    "apache-airflow-core==3.1.7",
+    "apache-airflow-task-sdk==1.2.0",
+    "apache-airflow-core==3.2.0",
 ]
 
 packages = []
