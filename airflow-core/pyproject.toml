@@ -18,12 +18,12 @@
 [build-system]
 requires = [
     "gitdb==4.0.12",
-    "GitPython==3.1.46",
+    "GitPython==3.1.47",
     "hatchling==1.29.0",
-    "packaging==26.0",
-    "pathspec==1.0.4",
+    "packaging==26.1",
+    "pathspec==1.1.0",
     "pluggy==1.6.0",
-    "smmap==5.0.2",
+    "smmap==5.0.3",
     "tomli==2.4.0; python_version < '3.11'",
     "trove-classifiers==2026.1.14.14",
 ]
@@ -74,7 +74,7 @@ dependencies = [
     # is not compatible with it and leaves thread hanging This is already fixed in main of sqlalchemy
     # But not released yet - and we will likely have to add >=2.0.46+ for sqlalchemy when released to
     # protect against it https://github.com/sqlalchemy/sqlalchemy/issues/13039
-    "aiosqlite>=0.20.0,<0.22.0",
+    "aiosqlite>=0.20.0,<0.23.0",
     # Alembic is important to handle our migrations in predictable and performant way. It is developed
     # together with SQLAlchemy. Our experience with Alembic is that it very stable in minor version
     # The 1.13.0 of alembic marked some migration code as SQLAlchemy 2+ only so we limit it to 1.13.1
@@ -89,7 +89,7 @@ dependencies = [
     "cryptography>=41.0.0",
     "deprecated>=1.2.13",
     "dill>=0.2.2",
-    "fastapi[standard-no-fastapi-cloud-cli]>=0.116.0,<0.118.0",
+    "fastapi[standard-no-fastapi-cloud-cli]>=0.116.0,<0.137.0",
     "uvicorn>=0.37.0",
     "starlette>=0.45.0",
     "httpx>=0.25.0",
@@ -144,9 +144,9 @@ dependencies = [
     "termcolor>=3.0.0",
     "typing-extensions>=4.14.1",
     # https://github.com/apache/airflow/issues/56369 , rework universal-pathlib usage
-    "universal-pathlib>=0.2.6,<0.3.0",
+    "universal-pathlib>=0.2.6,<0.4.0",
     "uuid6>=2024.7.10",
-    "apache-airflow-task-sdk<1.2.0,==1.1.7",
+    "apache-airflow-task-sdk==1.2.1",
     # pre-installed providers
     "apache-airflow-providers-common-compat>=1.7.4",
     "apache-airflow-providers-common-io>=1.6.3",
